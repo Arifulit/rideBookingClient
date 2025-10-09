@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -5,6 +6,8 @@ import {
   useGetActiveRideQuery,
   useUpdateRideStatusMutation,
   useCompleteRideMutation,
+useGetAllRidesForDriverQuery,
+  
 } from '@/redux/features/driver/driverApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -59,12 +62,18 @@ const DriverRides = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
   // Use backend data
-  const { data: activeRide, refetch: refetchActiveRide } = useGetActiveRideQuery();
-  const { data: rideHistory } = useGetRideHistoryQuery({ page: 1, limit: 50 });
+  // const { data: activeRide, refetch: refetchActiveRide } = useGetActiveRideQuery();useGetAllRidesForDriverQuery();
+  // const { data: allRides } = useGetAllRidesForDriverQuery();
+  // const { data: rideHistory } = useGetRideHistoryQuery({ page: 1, limit: 50 });
+  const { data: activeRide, isLoading: loadingActive, isError: activeError, error: activeErrObj } = useGetActiveRideQuery();
+  const { data: rideHistory, isLoading: loadingHistory, isError: historyError, error: historyErrObj } = useGetRideHistoryQuery({ page: 1, limit: 20 });
   const [updateRideStatus] = useUpdateRideStatusMutation();
   const [completeRide] = useCompleteRideMutation();
   const { toast } = useToast();
 
+  
+console.log("data active ride",activeRide);
+console.log("data ride history", rideHistory);
   // Build a unified rides array: active ride first, then history
   const rides: Ride[] = [];
   if (activeRide) {

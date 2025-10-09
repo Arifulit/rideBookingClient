@@ -1,4 +1,4 @@
-import { baseApi } from '@/redux/baseApi';
+import { baseApi } from "@/redux/baseApi";
 
 export interface DriverProfile {
   id: string;
@@ -18,12 +18,12 @@ export interface DriverProfile {
     year: number;
     color: string;
     licensePlate: string;
-    type: 'sedan' | 'suv' | 'bike' | 'auto';
+    type: "sedan" | "suv" | "bike" | "auto";
   };
   licenseInfo: {
     number: string;
     expiryDate: string;
-    verificationStatus: 'pending' | 'approved' | 'rejected';
+    verificationStatus: "pending" | "approved" | "rejected";
   };
   documents?: {
     license?: string;
@@ -61,14 +61,14 @@ export interface RideRequest {
     latitude: number;
     longitude: number;
   };
-  rideType: 'economy' | 'premium' | 'luxury';
+  rideType: "economy" | "premium" | "luxury";
   estimatedFare: number;
   estimatedDistance: number;
   estimatedDuration: number;
   requestedAt: string;
   expiresAt: string;
-  status: 'pending' | 'accepted' | 'rejected' | 'expired';
-  paymentMethod: 'cash' | 'card' | 'wallet';
+  status: "pending" | "accepted" | "rejected" | "expired";
+  paymentMethod: "cash" | "card" | "wallet";
   passengers: number;
   notes?: string;
 }
@@ -94,15 +94,21 @@ export interface ActiveRide {
     latitude: number;
     longitude: number;
   };
-  rideType: 'economy' | 'premium' | 'luxury';
-  status: 'accepted' | 'driver-arriving' | 'driver-arrived' | 'in-progress' | 'completed' | 'cancelled';
+  rideType: "economy" | "premium" | "luxury";
+  status:
+    | "accepted"
+    | "driver-arriving"
+    | "driver-arrived"
+    | "in-progress"
+    | "completed"
+    | "cancelled";
   fare: {
     baseFare: number;
     distanceFare: number;
     timeFare: number;
     total: number;
   };
-  paymentMethod: 'cash' | 'card' | 'wallet';
+  paymentMethod: "cash" | "card" | "wallet";
   acceptedAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -153,14 +159,14 @@ export interface DriverRideHistory {
     };
     pickupAddress: string;
     destinationAddress: string;
-    status: 'completed' | 'cancelled';
+    status: "completed" | "cancelled";
     fare: number;
     distance: number;
     duration: number;
     rating?: number;
     tips?: number;
     completedAt: string;
-    paymentMethod: 'cash' | 'card' | 'wallet';
+    paymentMethod: "cash" | "card" | "wallet";
   }[];
   pagination: {
     currentPage: number;
@@ -183,185 +189,223 @@ export const driverApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // Get driver profile
     getDriverProfile: builder.query<DriverProfile, void>({
-      query: () => ({ url: '/users/profile' }),
-      providesTags: ['DriverProfile'],
+      query: () => ({ url: "/driver/profile" }),
+      providesTags: ["DriverProfile"],
     }),
 
     // Update driver profile
-    updateDriverProfile: builder.mutation<DriverProfile, Partial<DriverProfile>>({
+    updateDriverProfile: builder.mutation<
+      DriverProfile,
+      Partial<DriverProfile>
+    >({
       query: (profileData) => ({
-        url: '/users/profile',
-        method: 'PUT',
+        url: "/driver/profile",
+        method: "PUT",
         body: profileData,
       }),
-      invalidatesTags: ['DriverProfile'],
+      invalidatesTags: ["DriverProfile"],
     }),
 
     // Update driver availability status
-    updateDriverAvailability: builder.mutation<{ isAvailable: boolean; message: string }, boolean>({
+    updateDriverAvailability: builder.mutation<
+      { isAvailable: boolean; message: string },
+      boolean
+    >({
       query: (isAvailable) => ({
-        url: '/drivers/availability',
-        method: 'PATCH',
+        url: "/drivers/availability",
+        method: "PATCH",
         body: { isAvailable },
       }),
-      invalidatesTags: ['DriverProfile'],
+      invalidatesTags: ["DriverProfile"],
     }),
 
     // Update driver online status
-    updateDriverOnlineStatus: builder.mutation<{ isOnline: boolean; message: string }, boolean>({
+    updateDriverOnlineStatus: builder.mutation<
+      { isOnline: boolean; message: string },
+      boolean
+    >({
       query: (isOnline) => ({
-        url: '/driver/online-status',
-        method: 'PUT',
+        url: "/driver/online-status",
+        method: "PUT",
         body: { isOnline },
       }),
-      invalidatesTags: ['DriverProfile'],
+      invalidatesTags: ["DriverProfile"],
     }),
 
     // Update driver location
-    updateDriverLocation: builder.mutation<{ 
-      location: { latitude: number; longitude: number; address: string }; 
-      message: string;
-    }, {
-      latitude: number;
-      longitude: number;
-      address?: string;
-    }>({
+    updateDriverLocation: builder.mutation<
+      {
+        location: { latitude: number; longitude: number; address: string };
+        message: string;
+      },
+      {
+        latitude: number;
+        longitude: number;
+        address?: string;
+      }
+    >({
       query: (locationData) => ({
-        url: '/driver/location',
-        method: 'PUT',
+        url: "/driver/location",
+        method: "PUT",
         body: locationData,
       }),
-      invalidatesTags: ['DriverProfile'],
+      invalidatesTags: ["DriverProfile"],
     }),
 
     // Get incoming ride requests
     getIncomingRequests: builder.query<RideRequest[], void>({
-      query: () => ({ url: '/driver/requests/incoming' }),
-      providesTags: ['IncomingRequests'],
+      query: () => ({ url: "/driver/requests/incoming" }),
+      providesTags: ["IncomingRequests"],
     }),
 
+        // Add this endpoint if not already present
+    getAllRidesForDriver: builder.query<DriverRideHistory, void>({
+      query: () => ({ url: "/rides/all", method: "GET" }),
+      providesTags: ["RideHistory"],
+    }),
     // Accept ride request
     acceptRideRequest: builder.mutation<ActiveRide, string>({
       query: (requestId) => ({
         url: `/driver/requests/${requestId}/accept`,
-        method: 'POST',
+        method: "POST",
       }),
-      invalidatesTags: ['IncomingRequests', 'ActiveRide'],
+      invalidatesTags: ["IncomingRequests", "ActiveRide"],
     }),
 
     // Reject ride request
-    rejectRideRequest: builder.mutation<{ message: string; success: boolean }, string>({
+    rejectRideRequest: builder.mutation<
+      { message: string; success: boolean },
+      string
+    >({
       query: (requestId) => ({
         url: `/driver/requests/${requestId}/reject`,
-        method: 'POST',
+        method: "POST",
       }),
-      invalidatesTags: ['IncomingRequests'],
+      invalidatesTags: ["IncomingRequests"],
     }),
 
     // Get active ride
     getActiveRide: builder.query<ActiveRide | null, void>({
-      query: () => ({ url: '/driver/ride/active' }),
-      providesTags: ['ActiveRide'],
+      query: () => ({ url: "/ride/active" }),
+      providesTags: ["ActiveRide"],
     }),
 
     // Update ride status
-    updateRideStatus: builder.mutation<ActiveRide, { 
-      rideId: string; 
-      status: ActiveRide['status'];
-      location?: { latitude: number; longitude: number };
-    }>({
+    updateRideStatus: builder.mutation<
+      ActiveRide,
+      {
+        rideId: string;
+        status: ActiveRide["status"];
+        location?: { latitude: number; longitude: number };
+      }
+    >({
       query: ({ rideId, status, location }) => ({
         url: `/driver/ride/${rideId}/status`,
-        method: 'PUT',
+        method: "PUT",
         body: { status, location },
       }),
-      invalidatesTags: ['ActiveRide', 'RideHistory', 'Earnings'],
+      invalidatesTags: ["ActiveRide", "RideHistory", "Earnings"],
     }),
 
     // Complete ride
-    completeRide: builder.mutation<{ ride: ActiveRide; earnings: number; message: string }, {
-      rideId: string;
-      finalLocation: { latitude: number; longitude: number };
-      actualDistance?: number;
-      actualDuration?: number;
-    }>({
+    completeRide: builder.mutation<
+      { ride: ActiveRide; earnings: number; message: string },
+      {
+        rideId: string;
+        finalLocation: { latitude: number; longitude: number };
+        actualDistance?: number;
+        actualDuration?: number;
+      }
+    >({
       query: (completeData) => ({
         url: `/driver/ride/${completeData.rideId}/complete`,
-        method: 'POST',
+        method: "POST",
         body: completeData,
       }),
-      invalidatesTags: ['ActiveRide', 'RideHistory'],
+      invalidatesTags: ["ActiveRide", "RideHistory"],
     }),
 
     // Get driver earnings
-    getDriverEarnings: builder.query<DriverEarnings, {
-      period?: 'daily' | 'weekly' | 'monthly';
-      startDate?: string;
-      endDate?: string;
-    }>({
+    getDriverEarnings: builder.query<
+      DriverEarnings,
+      {
+        period?: "daily" | "weekly" | "monthly";
+        startDate?: string;
+        endDate?: string;
+      }
+    >({
       query: (params = {}) => ({
-        url: '/driver/earnings',
+        url: "/driver/earnings",
         params,
       }),
-      providesTags: ['Earnings'],
+      providesTags: ["Earnings"],
     }),
 
     // Get ride history
-    getRideHistory: builder.query<DriverRideHistory, {
-      page?: number;
-      limit?: number;
-      status?: 'completed' | 'cancelled';
-      startDate?: string;
-      endDate?: string;
-    }>({
+    getRideHistory: builder.query<
+      DriverRideHistory,
+      {
+        page?: number;
+        limit?: number;
+        status?: "completed" | "cancelled";
+        startDate?: string;
+        endDate?: string;
+      }
+    >({
       query: (params = {}) => ({
-        url: 'drivers/rides/history',
+        url: "drivers/rides/history",
         params,
       }),
-      providesTags: ['RideHistory'],
+      providesTags: ["RideHistory"],
     }),
 
     // Update driver documents
-    updateDriverDocuments: builder.mutation<DriverProfile, {
-      licenseImage?: File;
-      vehicleRegistration?: File;
-      insurance?: File;
-    }>({
+    updateDriverDocuments: builder.mutation<
+      DriverProfile,
+      {
+        licenseImage?: File;
+        vehicleRegistration?: File;
+        insurance?: File;
+      }
+    >({
       query: (documents) => {
         const formData = new FormData();
         Object.entries(documents).forEach(([key, file]) => {
           if (file) formData.append(key, file);
         });
         return {
-          url: '/driver/documents',
-          method: 'PUT',
+          url: "/driver/documents",
+          method: "PUT",
           body: formData,
         };
       },
-      invalidatesTags: ['DriverProfile'],
+      invalidatesTags: ["DriverProfile"],
     }),
 
     // Get driver analytics
-    getDriverAnalytics: builder.query<{
-      totalRides: number;
-      totalEarnings: number;
-      averageRating: number;
-      completionRate: number;
-      onlineHours: number;
-      peakHoursEarnings: number;
-      weeklyGrowth: number;
-      monthlyGrowth: number;
-      ridesByHour: Array<{ hour: number; rides: number }>;
-      earningsByDay: Array<{ day: string; earnings: number }>;
-      ratingTrend: Array<{ date: string; rating: number }>;
-    }, {
-      period?: 'week' | 'month' | 'year';
-    }>({
+    getDriverAnalytics: builder.query<
+      {
+        totalRides: number;
+        totalEarnings: number;
+        averageRating: number;
+        completionRate: number;
+        onlineHours: number;
+        peakHoursEarnings: number;
+        weeklyGrowth: number;
+        monthlyGrowth: number;
+        ridesByHour: Array<{ hour: number; rides: number }>;
+        earningsByDay: Array<{ day: string; earnings: number }>;
+        ratingTrend: Array<{ date: string; rating: number }>;
+      },
+      {
+        period?: "week" | "month" | "year";
+      }
+    >({
       query: (params = {}) => ({
-        url: '/driver/analytics',
+        url: "/driver/analytics",
         params,
       }),
-      providesTags: ['Analytics'],
+      providesTags: ["Analytics"],
     }),
   }),
 });
@@ -382,6 +426,7 @@ export const {
   useGetRideHistoryQuery,
   useUpdateDriverDocumentsMutation,
   useGetDriverAnalyticsQuery,
+  useGetAllRidesForDriverQuery,
 } = driverApi;
 
 // Export aliases for backward compatibility
