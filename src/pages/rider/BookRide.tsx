@@ -74,11 +74,22 @@ const BookRide = () => {
       };
 
       const response = await createRide(rideRequest).unwrap();
-      toast.success('Ride requested successfully!');
-      navigate(`/rider/rides/${response.id}`);
+      // response may be the created ride or wrapped in { data }
+      const rideId = response?.id || response?.data?.id || null;
+      if (rideId) {
+        toast.success('Ride requested successfully!');
+        navigate(`/rider/rides/${rideId}`);
+      } else {
+        console.warn('createRide returned unexpected shape', response);
+        toast.success('Ride requested — awaiting confirmation');
+        // Optionally navigate to ride list instead of detail
+        navigate('/rider/rides');
+      }
     } catch (error: any) {
       console.error('Book ride error:', error);
-      toast.error(error?.data?.message || 'Failed to book ride. Please try again.');
+      // Try to extract a friendly message from common response shapes
+      const serverMessage = error?.data?.message || error?.message || (error?.data && JSON.stringify(error.data)) || null;
+      toast.error(serverMessage || 'Failed to book ride. Please try again.');
     }
   };
 

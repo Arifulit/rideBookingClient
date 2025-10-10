@@ -3,6 +3,7 @@ import { ISidebarItem } from "@/types";
 import DriverDashboard from "@/pages/driver/DriverDashboard";
 import DriverRides from "@/pages/driver/DriverRides";
 import DriverProfile from "@/pages/driver/DriverProfile";
+import RidersList from "@/pages/driver/RidersList";
 
 export const driverSidebarItems: ISidebarItem[] = [
   {
@@ -20,6 +21,12 @@ export const driverSidebarItems: ISidebarItem[] = [
         icon: ClipboardList,
         component: DriverRides,
       },
+      {
+        title: "All Riders",
+        url: "/driver/riders",
+        icon: User,
+        component: RidersList,
+      },
     ],
   },
   {
@@ -27,7 +34,7 @@ export const driverSidebarItems: ISidebarItem[] = [
     items: [
       {
         title: "Profile",
-        url: "/users/profile",
+        url: "/driver/profile",
         icon: User,
         component: DriverProfile,
       },

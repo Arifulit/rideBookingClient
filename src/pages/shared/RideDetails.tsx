@@ -1,5 +1,6 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
+import { useGetRideDetailsQuery } from '@/redux/features/rider/riderApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,68 +22,75 @@ import {
 const RideDetails = () => {
   const { rideId } = useParams();
 
-  // Mock ride data - in a real app, this would be fetched based on rideId
-  const rideData = {
-    id: rideId || 'R001',
-    status: 'completed',
-    createdAt: '2024-03-15T10:30:00Z',
-    startedAt: '2024-03-15T10:35:00Z',
-    completedAt: '2024-03-15T11:05:00Z',
-    rider: {
-      id: 'U001',
-      name: 'John Doe',
-      phone: '+1 (555) 123-4567',
-      rating: 4.7,
-      avatar: undefined
-    },
-    driver: {
-      id: 'D001',
-      name: 'Alice Johnson',
-      phone: '+1 (555) 987-6543',
-      rating: 4.9,
-      avatar: undefined,
-      vehicleInfo: {
-        make: 'Toyota',
-        model: 'Camry',
-        year: '2022',
-        color: 'Silver',
-        licensePlate: 'ABC-123'
-      }
-    },
-    pickup: {
-      address: '123 Main Street, Downtown',
-      coordinates: { lat: 40.7128, lng: -74.0060 },
-      instructions: 'Near the coffee shop entrance'
-    },
-    destination: {
-      address: '456 Oak Avenue, Uptown',
-      coordinates: { lat: 40.7580, lng: -73.9855 },
-      instructions: 'Main building entrance'
-    },
-    route: {
-      distance: 8.5, // km
-      duration: 35, // minutes
-      estimatedDuration: 32 // initial estimate
-    },
-    payment: {
-      method: 'credit_card',
-      baseFare: 18.00,
-      distanceFare: 5.10,
-      timeFare: 2.40,
-      surge: 0,
-      tip: 5.00,
-      subtotal: 25.50,
-      tax: 2.04,
-      total: 27.54,
-      currency: 'USD'
-    },
-    rating: {
-      riderRating: 5,
-      driverRating: 4,
-      riderComment: 'Great driver, smooth ride!',
-      driverComment: 'Polite passenger, easy pickup'
-    }
-  };
+  // Fetch ride details from API when rideId is present - no mock fallback
+  const {
+    data: rideDataFromApi,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useGetRideDetailsQuery(rideId as string, {
+    skip: !rideId,
+  });
+
+  const rideData = rideDataFromApi;
+
+  if (isLoading) {
+    return (
+      <div className="py-12">
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading ride details...</CardTitle>
+            <CardDescription>Please wait while we fetch the ride information.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500">Connecting to server...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="py-12">
+        <Card>
+          <CardHeader>
+            <CardTitle>Failed to load ride</CardTitle>
+            <CardDescription>There was a problem fetching ride details.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-600">Could not fetch ride details. Check your network or authentication.</p>
+            {error && (
+              <p className="text-xs text-red-500 mt-2">{extractErrorMessage(error)}</p>
+            )}
+            <div className="mt-4">
+              <Button variant="ghost" onClick={() => refetch()}>Retry</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!rideData) {
+    return (
+      <div className="py-12">
+        <Card>
+          <CardHeader>
+            <CardTitle>No ride found</CardTitle>
+            <CardDescription>The ride could not be found. It may have been removed.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-600">Try a different Ride ID or check with support.</p>
+            <div className="mt-4">
+              <Button variant="ghost" onClick={() => refetch()}>Retry</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -111,6 +119,18 @@ const RideDetails = () => {
     }
     return `${mins}m`;
   };
+
+  // Safely extract message from unknown error shapes (hoisted function to avoid TDZ)
+  function extractErrorMessage(err: unknown): string {
+    if (!err) return '';
+    if (typeof err === 'string') return err;
+    if (err instanceof Error) return err.message;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
 
   return (
     <div className="space-y-6">

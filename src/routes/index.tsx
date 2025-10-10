@@ -24,6 +24,7 @@ import PaymentFail from "@/pages/Payment/PaymentFail";
 import NotFound from "@/pages/status/NotFound";
 import Home from "@/pages/public/Home";
 import { driverSidebarItems } from "./driverSidebarItems";
+import RiderDetails from '@/pages/driver/RiderDetails';
 
 
 // Router configuration using createBrowserRouter
@@ -101,6 +102,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/driver/dashboard" replace /> },
       ...generateRoutes(driverSidebarItems),
+  { path: 'riders/:id', Component: RiderDetails },
     ],
   },
   // User/Rider Routes

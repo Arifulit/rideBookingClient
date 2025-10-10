@@ -12,6 +12,26 @@ import type {
   Location
 } from '@/types/rider';
 
+// Minimal driver shape returned by /ride/search-drivers
+export type Driver = {
+  id: string;
+  name?: string;
+  vehicle?: {
+    make?: string;
+    model?: string;
+    plate?: string;
+    type?: string;
+  } | null;
+  location?: {
+    latitude: number;
+    longitude: number;
+    address?: string;
+  } | null;
+  distanceMeters?: number;
+  etaSeconds?: number;
+  rating?: number;
+};
+
 export const riderApi = createApi({
   reducerPath: 'riderApi',
   baseQuery: axiosBaseQuery(),
@@ -38,7 +58,7 @@ export const riderApi = createApi({
     // Ride Request
     createRideRequest: builder.mutation<Ride, RideRequest>({
       query: (rideData) => ({
-        url: '/rides',
+        url: '/rides/request',
         method: 'POST',
         data: rideData,
       }),
@@ -48,7 +68,7 @@ export const riderApi = createApi({
     // Get Ride Details
     getRideDetails: builder.query<Ride, string>({
       query: (rideId) => ({
-        url: `/rides/${rideId}`,
+        url: `/ride/${rideId}`,
         method: 'GET',
       }),
       providesTags: (_result, _error, rideId) => [
@@ -57,27 +77,36 @@ export const riderApi = createApi({
       ],
     }),
 
-    // Get Fare Estimation
-    getFareEstimation: builder.query<FareEstimation[], {
-      pickup: Location;
-      destination: Location;
-      rideTypes?: string[];
+    // Get Fare Estimation (accepts pickupLocation, dropoffLocation, vehicleType)
+    getFareEstimation: builder.mutation<FareEstimation, {
+      pickupLocation: { latitude: number; longitude: number; address?: string };
+      dropoffLocation: { latitude: number; longitude: number; address?: string };
+      vehicleType?: string;
     }>({
-      query: ({ pickup, destination, rideTypes = ['economy', 'premium', 'luxury'] }) => ({
-        url: '/rides/estimate-fare',
+      query: ({ pickupLocation, dropoffLocation, vehicleType = 'car' }) => ({
+        url: '/ride/estimate',
         method: 'POST',
         data: {
-          pickupLocation: pickup,
-          destinationLocation: destination,
-          rideTypes,
+          pickupLocation,
+          dropoffLocation,
+          vehicleType,
         },
       }),
     }),
+      // Search for nearby drivers based on rider location and radius
+      searchDrivers: builder.mutation<Driver[], { latitude: number; longitude: number; radius: number }>({
+        query: (coords) => ({
+          url: '/ride/search-drivers',
+          method: 'POST',
+          data: coords,
+        }),
+        // No cache invalidation required; this is an on-demand search
+      }),
 
     // Get Ride History
     getRideHistory: builder.query<RideHistory, RideSearchParams>({
       query: (params) => ({
-        url: '/rides/history',
+        url: '/ride/my-rides',
         method: 'GET',
         params,
       }),
@@ -87,7 +116,7 @@ export const riderApi = createApi({
     // Cancel Ride Request
     cancelRideRequest: builder.mutation<Ride, { rideId: string; reason?: string }>({
       query: ({ rideId, reason }) => ({
-        url: `/rides/${rideId}/cancel`,
+        url: `/ride/${rideId}/cancel`,
         method: 'PATCH',
         data: { reason },
       }),
@@ -102,9 +131,19 @@ export const riderApi = createApi({
       comment?: string 
     }>({
       query: ({ rideId, driverId, rating, comment }) => ({
-        url: `/rides/${rideId}/rate-driver`,
+        url: `/ride/${rideId}/rate`,
         method: 'PATCH',
         data: { driverId, rating, comment },
+      }),
+      invalidatesTags: (_result, _error, { rideId }) => [{ type: 'Ride', id: rideId }],
+    }),
+
+    // Convenience mutation: accept { rideId, rating, feedback } from UI and map to server shape
+    rateDriverSimple: builder.mutation<Ride, { rideId: string; rating: number; feedback?: string }>({
+      query: ({ rideId, rating, feedback }) => ({
+        url: `/ride/${rideId}/rate`,
+        method: 'PATCH',
+        data: { rating, comment: feedback },
       }),
       invalidatesTags: (_result, _error, { rideId }) => [{ type: 'Ride', id: rideId }],
     }),
@@ -112,7 +151,7 @@ export const riderApi = createApi({
     // Live Ride Tracking
     getLiveRideTracking: builder.query<LiveRideTracking, string>({
       query: (rideId) => ({
-        url: `/rides/${rideId}/tracking`,
+        url: `/ride/${rideId}/tracking`,
         method: 'GET',
       }),
     }),
@@ -120,7 +159,7 @@ export const riderApi = createApi({
     // Profile Management
     getRiderProfile: builder.query<RiderProfile, void>({
       query: () => ({
-        url: '/rider/profile',
+        url: '/users/profile',
         method: 'GET',
       }),
       providesTags: ['Profile'],
@@ -128,7 +167,7 @@ export const riderApi = createApi({
 
     updateRiderProfile: builder.mutation<RiderProfile, Partial<RiderProfile>>({
       query: (profileData) => ({
-        url: '/rider/profile',
+        url: '/users/profile',
         method: 'PUT',
         data: profileData,
       }),
@@ -140,7 +179,7 @@ export const riderApi = createApi({
       newPassword: string;
     }>({
       query: (passwordData) => ({
-        url: '/rider/change-password',
+        url: '/users/change-password',
         method: 'POST',
         data: passwordData,
       }),
@@ -148,7 +187,7 @@ export const riderApi = createApi({
 
     uploadProfileImage: builder.mutation<{ imageUrl: string }, FormData>({
       query: (formData) => ({
-        url: '/rider/profile/upload-image',
+        url: '/users/profile/upload-image',
         method: 'POST',
         data: formData,
         headers: {
@@ -270,14 +309,14 @@ export const {
   
   // Ride requests
   useCreateRideRequestMutation,
-  useGetFareEstimationQuery,
-  useLazyGetFareEstimationQuery,
+  useGetFareEstimationMutation,
 
   // Ride management
   useGetRideHistoryQuery,
   useGetRideDetailsQuery,
   useCancelRideRequestMutation,
   useRateDriverMutation,
+  useRateDriverSimpleMutation,
 
   // Live tracking
   useGetLiveRideTrackingQuery,

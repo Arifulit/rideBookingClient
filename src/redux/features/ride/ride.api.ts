@@ -6,7 +6,7 @@ export const ridesApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     createRide: builder.mutation<Ride, { pickup: string; destination: string; fare: number }>({
       query: (rideData) => ({
-        url: '/rides',
+        url: '/rides/request',
         method: 'POST',
         data: rideData, 
       }),
@@ -24,7 +24,7 @@ export const ridesApi = baseApi.injectEndpoints({
       { limit?: number }
     >({
       query: (params = {}) => ({
-        url: '/rides',
+        url: '/ride',
         method: 'GET',
         params,
       }),
@@ -33,7 +33,7 @@ export const ridesApi = baseApi.injectEndpoints({
 
     getRideById: builder.query<Ride, string>({
       query: (id) => ({
-        url: `/rides/${id}`,
+        url: `/ride/${id}`,
         method: 'GET',
       }),
       providesTags: ['Ride'],
@@ -41,7 +41,7 @@ export const ridesApi = baseApi.injectEndpoints({
 
     updateRideStatus: builder.mutation<Ride, { id: string; status: string }>({
       query: ({ id, status }) => ({
-        url: `/rides/${id}/status`,
+        url: `/ride/${id}/status`,
         method: 'PATCH',
         data: { status },
       }),
@@ -50,8 +50,8 @@ export const ridesApi = baseApi.injectEndpoints({
 
     acceptRide: builder.mutation<Ride, string>({
       query: (id) => ({
-        url: `/rides/${id}/accept`,
-        method: 'POST',
+        url: `/ride/${id}/accept`,
+        method: 'PATCH',
       }),
       invalidatesTags: ['Ride'],
     }),

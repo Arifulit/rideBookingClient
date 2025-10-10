@@ -8,7 +8,8 @@ import axiosBaseQuery from './axiosBaseQuery';
 //   prepareHeaders: (headers, { getState }) => {
 //     const token = (getState() as any).auth.token;
 //     if (token) {
-//       headers.set('authorization', `${token}`);
+//       // Use Authorization header without Bearer prefix
+//       headers.set('Authorization', `${token}`);
 //     }
 //     return headers;
 //   },

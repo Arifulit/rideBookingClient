@@ -38,12 +38,12 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3 group">
+          <Link to="/" className="flex items-center space-x-3 group max-w-[220px]">
             <div className="relative">
               <Car className="h-8 w-8 text-primary group-hover:text-primary/80 transition-colors" />
               <div className="absolute -inset-1 bg-primary/20 rounded-full opacity-0 group-hover:opacity-30 transition-opacity"></div>
             </div>
-            <span className="text-xl font-bold gradient-text">
+            <span className="text-xl font-bold gradient-text truncate">
               RideBook Pro
             </span>
           </Link>

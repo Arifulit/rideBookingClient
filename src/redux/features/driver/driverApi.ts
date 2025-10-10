@@ -179,9 +179,21 @@ export interface DriverRideHistory {
   };
 }
 
+// Minimal Rider shape returned by /drivers/riders
+export type Rider = {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  rating?: number;
+  profileImage?: string;
+  createdAt?: string;
+};
+
 export const driverApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    // Get driver profile
+    // Get driver profile (backend driver router mounted at /driver)
     getDriverProfile: builder.query<DriverProfile, void>({
       query: () => ({ url: '/driver/profile' }),
       providesTags: ['DriverProfile'],
@@ -200,7 +212,7 @@ export const driverApi = baseApi.injectEndpoints({
     // Update driver availability status
     updateDriverAvailability: builder.mutation<{ isAvailable: boolean; message: string }, boolean>({
       query: (isAvailable) => ({
-        url: '/drivers/availability',
+        url: '/driver/availability',
         method: 'PATCH',
         body: { isAvailable },
       }),
@@ -228,52 +240,59 @@ export const driverApi = baseApi.injectEndpoints({
     }>({
       query: (locationData) => ({
         url: '/driver/location',
-        method: 'PUT',
+        method: 'PATCH',
         body: locationData,
       }),
       invalidatesTags: ['DriverProfile'],
     }),
 
-    // Get incoming ride requests
+    // Get incoming ride requests (driver router)
     getIncomingRequests: builder.query<RideRequest[], void>({
-      query: () => ({ url: '/driver/requests/incoming' }),
+      query: () => ({ url: '/driver/rides/pending' }),
       providesTags: ['IncomingRequests'],
     }),
 
-    // Accept ride request
+    // Accept ride request (global ride router)
     acceptRideRequest: builder.mutation<ActiveRide, string>({
-      query: (requestId) => ({
-        url: `/driver/requests/${requestId}/accept`,
-        method: 'POST',
+      query: (rideId) => ({
+        url: `/ride/${rideId}/accept`,
+        method: 'PATCH',
       }),
       invalidatesTags: ['IncomingRequests', 'ActiveRide'],
     }),
 
-    // Reject ride request
+    // Reject ride request (global ride router)
     rejectRideRequest: builder.mutation<{ message: string; success: boolean }, string>({
-      query: (requestId) => ({
-        url: `/driver/requests/${requestId}/reject`,
-        method: 'POST',
+      query: (rideId) => ({
+        url: `/ride/${rideId}/reject`,
+        method: 'PATCH',
       }),
       invalidatesTags: ['IncomingRequests'],
     }),
 
-    // Get active ride
+    // Get active ride (driver router)
     getActiveRide: builder.query<ActiveRide | null, void>({
-      query: () => ({ url: '/ride/active' }),
+      query: () => ({ url: '/driver/rides/active' }),
       providesTags: ['ActiveRide'],
     }),
 
-    // Update ride status
+    // Update ride status (driver actions)
+    // Accepts payloads such as:
+    // { status: 'picked_up', notes: 'Passenger on board' }
+    // { status: 'in_transit' }
+    // { status: 'completed', finalFare: 250, endLocation: { latitude, longitude } }
     updateRideStatus: builder.mutation<ActiveRide, { 
       rideId: string; 
       status: ActiveRide['status'];
+      notes?: string;
+      finalFare?: number;
+      endLocation?: { latitude: number; longitude: number };
       location?: { latitude: number; longitude: number };
     }>({
-      query: ({ rideId, status, location }) => ({
-        url: `/driver/ride/${rideId}/status`,
-        method: 'PUT',
-        body: { status, location },
+      query: ({ rideId, status, notes, finalFare, endLocation, location }) => ({
+        url: `/ride/${rideId}/status`,
+        method: 'PATCH',
+        body: { status, notes, finalFare, endLocation, location },
       }),
       invalidatesTags: ['ActiveRide', 'RideHistory', 'Earnings'],
     }),
@@ -286,21 +305,21 @@ export const driverApi = baseApi.injectEndpoints({
       actualDuration?: number;
     }>({
       query: (completeData) => ({
-        url: `/driver/ride/${completeData.rideId}/complete`,
+        url: `/ride/${completeData.rideId}/complete`,
         method: 'POST',
         body: completeData,
       }),
       invalidatesTags: ['ActiveRide', 'RideHistory'],
     }),
 
-    // Get driver earnings
+    // Get driver earnings (backend endpoint moved to /drivers/earnings/detailed)
     getDriverEarnings: builder.query<DriverEarnings, {
       period?: 'daily' | 'weekly' | 'monthly';
       startDate?: string;
       endDate?: string;
     }>({
       query: (params = {}) => ({
-        url: '/driver/earnings',
+        url: '/driver/earnings/detailed',
         params,
       }),
       providesTags: ['Earnings'],
@@ -315,7 +334,7 @@ export const driverApi = baseApi.injectEndpoints({
       endDate?: string;
     }>({
       query: (params = {}) => ({
-        url: 'drivers/rides/history',
+        url: '/driver/rides/history',
         params,
       }),
       providesTags: ['RideHistory'],
@@ -363,6 +382,62 @@ export const driverApi = baseApi.injectEndpoints({
       }),
       providesTags: ['Analytics'],
     }),
+    // Get all riders (driver-only endpoint)
+    getAllRiders: builder.query<Rider[], void>({
+      query: () => ({ url: '/drivers/riders', method: 'GET' }),
+      // The backend may wrap results differently across environments. Normalize common shapes here so
+      // the frontend always receives an array of riders.
+      transformResponse: (response: unknown) => {
+
+        let raw: unknown[] = [];
+        if (!response) return [] as Rider[];
+
+        if (Array.isArray(response)) raw = response;
+        else if (typeof response === 'object' && response !== null) {
+          const respObj = response as Record<string, unknown>;
+          const candidates = ['data', 'riders', 'items', 'result'];
+          for (const key of candidates) {
+            if (Array.isArray(respObj[key])) {
+              raw = respObj[key] as unknown[];
+              break;
+            }
+          }
+          if (raw.length === 0) {
+            const firstArray = Object.values(respObj).find((v) => Array.isArray(v));
+            if (Array.isArray(firstArray)) raw = firstArray as unknown[];
+          }
+        }
+
+        // Normalize each item to the Rider type expected by the frontend
+        const normalized: Rider[] = raw.map((item) => {
+          const obj = (item as unknown) as Record<string, unknown>;
+          const id = obj.id ?? obj._id ?? obj.uid ?? obj.userId ?? obj._uid ?? obj.riderId ?? '';
+          const name = typeof obj.name === 'string' ? obj.name : undefined;
+          const firstName = (obj.firstName as string) ?? (obj.firstname as string) ?? (obj.first_name as string) ?? (name?.split?.(' ')?.[0]) ?? '';
+          const lastName = (obj.lastName as string) ?? (obj.lastname as string) ?? (obj.last_name as string) ?? (name?.split?.(' ')?.slice(1).join(' ')) ?? '';
+          const email = (obj.email as string) ?? (obj.mail as string) ?? (obj.emailAddress as string) ?? (obj.email_address as string) ?? '';
+          const phone = (obj.phone as string) ?? (obj.mobile as string) ?? (obj.phoneNumber as string) ?? (obj.phone_number as string) ?? '';
+          const ratingRaw = obj.rating;
+          const rating = typeof ratingRaw === 'number' ? ratingRaw : (typeof ratingRaw === 'string' ? Number(ratingRaw) : undefined);
+          const profileImage = (obj.profileImage as string) ?? (obj.avatar as string) ?? (obj.image as string) ?? (obj.picture as string) ?? undefined;
+          const createdAt = (obj.createdAt as string) ?? (obj.created_at as string) ?? (obj.created as string) ?? undefined;
+
+          return {
+            id: String(id),
+            firstName: firstName || undefined,
+            lastName: lastName || undefined,
+            phone: phone || undefined,
+            email: email || undefined,
+            rating: typeof rating === 'number' && !Number.isNaN(rating) ? rating : undefined,
+            profileImage: profileImage || undefined,
+            createdAt: createdAt || undefined,
+          } as Rider;
+        });
+
+        return normalized;
+      },
+      providesTags: ['RidersList'],
+    }),
   }),
 });
 
@@ -382,6 +457,7 @@ export const {
   useGetRideHistoryQuery,
   useUpdateDriverDocumentsMutation,
   useGetDriverAnalyticsQuery,
+  useGetAllRidersQuery,
 } = driverApi;
 
 // Export aliases for backward compatibility

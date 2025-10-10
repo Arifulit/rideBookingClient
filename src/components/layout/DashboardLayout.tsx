@@ -5,7 +5,7 @@ import { selectUser } from '@/redux/store';
 import { logout } from '@/redux/index';
 import type { User as UserType } from '@/types/auth';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -158,15 +158,11 @@ const DashboardLayout = () => {
       <div className="flex-1 lg:pl-64">
         {/* Top Header */}
         <header className="bg-card shadow-sm border-b border-border">
-          <div className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between px-3 py-3 sm:px-6 sm:py-4 lg:px-8">
             <div className="flex items-center space-x-4">
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="lg:hidden">
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                </SheetTrigger>
-              </Sheet>
+              <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
+                <Menu className="h-5 w-5" />
+              </Button>
               
               <div className="flex-1 min-w-0">
                 <h1 className="text-xl font-semibold text-foreground">

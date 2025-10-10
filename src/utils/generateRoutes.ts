@@ -8,11 +8,20 @@ export const generateRoutes = (sidebarItems: ISidebarItem[]): RouteObject[] => {
     section.items.forEach((item) => {
       if (item.component && item.url) {
         // Extract the path from the URL (remove the prefix like /admin or /user)
-        const pathParts = item.url.split('/');
-        const path = pathParts[pathParts.length - 1];
-        
+        const pathParts = item.url.split('/').filter(Boolean);
+        const last = pathParts[pathParts.length - 1];
+
+        // Special-case 'details' pages: register a param route so
+        // URLs like '/rider/rides/123' resolve to the details component.
+        let routePath = last;
+        if (last === 'details' && pathParts.length >= 2) {
+          // Use the parent segment plus a parameter, e.g. 'rides/:rideId'
+          const parent = pathParts[pathParts.length - 2];
+          routePath = `${parent}/:rideId`;
+        }
+
         routes.push({
-          path: path,
+          path: routePath,
           Component: item.component,
         });
       }

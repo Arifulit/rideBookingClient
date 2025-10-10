@@ -67,7 +67,12 @@ const SheetContent = React.forwardRef<
         <Cross2Icon className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </SheetPrimitive.Close>
-      {children}
+      {/* Accessibility helpers: provide a hidden title/description so Radix Dialog has aria labels
+          This avoids dev-mode warnings when consumers don't include Title/Description. */}
+      <div id="sheet-title" className="sr-only">Sidebar</div>
+      <div id="sheet-desc" className="sr-only">Application navigation</div>
+      {React.cloneElement(<div />, { 'aria-hidden': true })}
+      <div aria-labelledby="sheet-title" aria-describedby="sheet-desc">{children}</div>
     </SheetPrimitive.Content>
   </SheetPortal>
 ))

@@ -2,6 +2,7 @@ import { configureStore, Middleware } from '@reduxjs/toolkit';
 import { setupListeners } from '@reduxjs/toolkit/query';
 import { baseApi } from './baseApi';
 import { adminApi } from './features/admin/adminApi';
+import { riderApi } from './features/rider/riderApi';
 // APIs are injected into baseApi, so no need to import them separately
 import authReducer from './features/auth/authSlice';
 import riderReducer from './features/rider/riderSlice';
@@ -50,9 +51,10 @@ declare global {
 export const store = configureStore({
   reducer: {
     auth: persistedAuthReducer,
-    rider: riderReducer,
+  rider: riderReducer,
     driver: driverReducer,
     [baseApi.reducerPath]: baseApi.reducer,
+  [riderApi.reducerPath]: riderApi.reducer,
     [adminApi.reducerPath]: adminApi.reducer,
   },
   middleware: (getDefaultMiddleware) => {
@@ -76,7 +78,7 @@ export const store = configureStore({
       actionCreatorCheck: true,
     });
     
-    return defaultMiddleware.concat(baseApi.middleware, adminApi.middleware, performanceMiddleware);
+    return defaultMiddleware.concat(baseApi.middleware, riderApi.middleware, adminApi.middleware, performanceMiddleware);
   },
   devTools: isDevelopment ? {
     name: 'Ride Booking App',

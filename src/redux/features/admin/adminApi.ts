@@ -28,8 +28,8 @@ export const adminApi = createApi({
       const state = getState() as RootState;
       const tokens = state.auth && 'tokens' in state.auth ? (state.auth as any).tokens : undefined;
       if (tokens?.accessToken) {
-        // ✅ FIXED: Proper Bearer token format
-        headers.set('authorization', `${tokens.accessToken}`);
+        // Use standard Bearer token format and proper capitalization
+        headers.set('Authorization', `Bearer ${tokens.accessToken}`);
         headers.set('content-type', 'application/json');
       }
       return headers;

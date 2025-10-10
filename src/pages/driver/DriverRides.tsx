@@ -59,15 +59,35 @@ const DriverRides = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
   // Use backend data
-  const { data: activeRide, refetch: refetchActiveRide } = useGetActiveRideQuery();
-  const { data: rideHistory } = useGetRideHistoryQuery({ page: 1, limit: 50 });
+  const {
+    data: activeRide,
+    refetch: refetchActiveRide,
+    isLoading: activeLoading,
+    isFetching: activeFetching,
+    isError: activeError,
+    error: activeErrorObj,
+  } = useGetActiveRideQuery();
+
+  const {
+    data: rideHistory,
+    isLoading: historyLoading,
+    isFetching: historyFetching,
+    isError: historyError,
+    error: historyErrorObj,
+  } = useGetRideHistoryQuery({ page: 1, limit: 50 });
   const [updateRideStatus] = useUpdateRideStatusMutation();
   const [completeRide] = useCompleteRideMutation();
   const { toast } = useToast();
 
   
-console.log("data active ride",activeRide);
-console.log("data ride history", rideHistory);
+  // Debug logs for backend responses and RTK Query states
+  console.log('data active ride', activeRide);
+  console.log('active ride states -> loading:', activeLoading, 'fetching:', activeFetching, 'error:', activeError);
+  if (activeErrorObj) console.log('active ride error object:', activeErrorObj);
+
+  console.log('data ride history', rideHistory);
+  console.log('ride history states -> loading:', historyLoading, 'fetching:', historyFetching, 'error:', historyError);
+  if (historyErrorObj) console.log('ride history error object:', historyErrorObj);
   // Build a unified rides array: active ride first, then history
   const rides: Ride[] = [];
   if (activeRide) {

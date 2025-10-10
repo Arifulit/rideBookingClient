@@ -21,13 +21,23 @@ Avatar.displayName = AvatarPrimitive.Root.displayName;
 const AvatarImage = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Image>,
   React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Image
-    ref={ref}
-    className={cn('aspect-square h-full w-full', className)}
-    {...props}
-  />
-));
+>(({ className, src, ...props }, ref) => {
+  // Avoid requesting an API placeholder that returns 404 in dev server.
+  // If src is falsy or points to the generic /api/placeholder path, don't pass it
+  // so Radix Avatar will render the fallback instead.
+  const invalidPlaceholder = typeof src === 'string' && src.startsWith('/api/placeholder');
+  const safeSrc = !src || invalidPlaceholder ? undefined : (src as string);
+
+  // Spread only safe props and src when available
+  return (
+    <AvatarPrimitive.Image
+      ref={ref}
+      className={cn('aspect-square h-full w-full', className)}
+  {...(props as unknown as Record<string, unknown>)}
+      {...(safeSrc ? { src: safeSrc } : {})}
+    />
+  );
+});
 AvatarImage.displayName = AvatarPrimitive.Image.displayName;
 
 const AvatarFallback = React.forwardRef<

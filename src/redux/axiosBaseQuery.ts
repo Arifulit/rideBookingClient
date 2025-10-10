@@ -40,6 +40,13 @@ const axiosBaseQuery =
         "✅ axiosBaseQuery - Response Data:",
         JSON.stringify(result.data, null, 2)
       );
+      // Additional helpful debugging info
+      try {
+        console.log("✅ axiosBaseQuery - Response Headers:", result.headers);
+        console.log("✅ axiosBaseQuery - Full Response:", result);
+      } catch {
+        console.log("✅ axiosBaseQuery - Could not stringify full response");
+      }
 
       // Special token logging for auth endpoints
       if (url?.includes("/auth/") && result.data?.data?.tokens) {
@@ -66,6 +73,12 @@ const axiosBaseQuery =
         JSON.stringify(err.response?.data, null, 2)
       );
       console.log("❌ axiosBaseQuery - Error Message:", err.message);
+      try {
+        console.log("❌ axiosBaseQuery - Error Config:", err.config);
+        console.log("❌ axiosBaseQuery - Error Full:", err.toJSON ? err.toJSON() : err);
+      } catch {
+        // ignore
+      }
       // If the driver ride history endpoint is missing on the backend, return a safe empty shape
       // so the UI can render an empty list instead of crashing.
       if (
