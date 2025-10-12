@@ -3,7 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 import { useAppSelector } from "@/redux/hook";
-import { useGetCurrentUserQuery } from "@/redux/features/auth/authApi";
+import { useGetProfileQuery } from '@/redux/features/user/user.api';
 import { 
   selectIsAuthenticated, 
   selectUser, 
@@ -32,7 +32,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { 
     isLoading: isUserLoading, 
     error: userError 
-  } = useGetCurrentUserQuery(undefined, {
+  } = useGetProfileQuery(undefined, {
     skip: !isAuthenticated || !tokens?.accessToken,
   });
 

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useGetProfileQuery, useUpdateMyProfileMutation } from '@/redux/features/user/user.api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,16 +25,19 @@ import {
 
 const AdminProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: 'Admin User',
-    email: 'admin@rideshare.com',
-    phone: '+1-234-567-8900',
-    address: '123 Admin Street, Management City, MC 12345',
-    joinDate: '2023-01-15',
-    department: 'Platform Management',
-    employeeId: 'EMP001',
-    role: 'Super Administrator'
-  });
+  const { data: profileWrapper, isLoading: profileLoading, isError: profileError, refetch } = useGetProfileQuery(undefined);
+  const [updateMyProfile] = useUpdateMyProfileMutation();
+
+  const [profileData, setProfileData] = useState(() => ({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    joinDate: '',
+    department: '',
+    employeeId: '',
+    role: ''
+  }));
 
   const [preferences, setPreferences] = useState({
     notifications: {
@@ -51,10 +55,52 @@ const AdminProfile = () => {
     }
   });
 
-  const handleSave = () => {
-    // Here you would save the profile data to your backend
-    setIsEditing(false);
-    console.log('Profile saved:', profileData);
+  const handleSave = async () => {
+    try {
+      console.debug('Submitting admin profile update', profileData);
+      // Debug helpers: log stored tokens and exact payload
+      try {
+        console.debug('LocalStorage accessToken:', localStorage.getItem('accessToken'));
+        console.debug('LocalStorage refreshToken:', localStorage.getItem('refreshToken'));
+      } catch (e) {
+        console.debug('Could not read localStorage tokens', e);
+      }
+      // send full editable profile to backend so all fields can be updated
+      const payload: Record<string, unknown> = { ...profileData };
+
+      // If the UI stores a combined `name`, split into firstName/lastName when possible
+      if (profileData.name) {
+        const parts = profileData.name.trim().split(/\s+/);
+        if (parts.length === 1) {
+          payload.firstName = parts[0];
+        } else if (parts.length >= 2) {
+          payload.firstName = parts.shift();
+          payload.lastName = parts.join(' ');
+        }
+      }
+
+      // Send the full payload; backend should apply partial updates from PATCH
+      console.debug('Outgoing PATCH /users/profile payload:', payload);
+      const res = await updateMyProfile(payload).unwrap();
+      console.debug('updateMyProfile response:', res);
+      setIsEditing(false);
+      console.debug('Admin profile updated (client-side)');
+      // Refresh profile data after successful update
+      try {
+        await refetch();
+      } catch (refetchErr) {
+        console.warn('Refetch after profile update failed', refetchErr);
+      }
+    } catch (err) {
+      console.error('Admin profile update failed', err);
+      // If RTK Query returned a structured error payload, log details
+      try {
+        // err might be a serialized error returned by axiosBaseQuery
+        console.error('Update error details:', JSON.stringify(err, null, 2));
+      } catch (jsonErr) {
+        console.error('Could not stringify update error', jsonErr);
+      }
+    }
   };
 
   const handleCancel = () => {
@@ -68,6 +114,23 @@ const AdminProfile = () => {
       [field]: value
     }));
   };
+
+  useEffect(() => {
+    const user = profileWrapper && (profileWrapper.user || profileWrapper);
+    if (user) {
+      console.debug('Loaded admin profile from API', user);
+      setProfileData({
+        name: `${user.firstName || user.name || ''} ${user.lastName || ''}`.trim(),
+        email: user.email || '',
+        phone: user.phone || '',
+        address: user.address || '',
+        joinDate: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '',
+        department: user.department || user.role || '',
+        employeeId: user.employeeId || user.employee_id || user.id || user._id || '',
+        role: user.role || ''
+      });
+    }
+  }, [profileWrapper]);
 
   const adminStats = [
     { label: 'Users Managed', value: '12,543', icon: <User className="h-4 w-4" /> },
@@ -102,7 +165,9 @@ const AdminProfile = () => {
         )}
       </div>
 
-      {/* Stats Cards */}
+  {/* Stats Cards */}
+  {profileLoading && <div>Loading profile...</div>}
+  {profileError && <div className="text-red-600">Failed to load admin profile. Check console for details.</div>}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {adminStats.map((stat, index) => (
           <Card key={index}>

@@ -166,9 +166,10 @@ export const riderApi = createApi({
     }),
 
     updateRiderProfile: builder.mutation<RiderProfile, Partial<RiderProfile>>({
+      // Backend expects PATCH for partial profile updates
       query: (profileData) => ({
         url: '/users/profile',
-        method: 'PUT',
+        method: 'PATCH',
         data: profileData,
       }),
       invalidatesTags: ['Profile'],

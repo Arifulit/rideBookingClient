@@ -28,6 +28,29 @@ export const usersApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['User'],
     }),
+    // Update the currently authenticated user's profile
+    updateMyProfile: builder.mutation({
+      query: (data: any) => ({
+        url: `/users/profile`,
+        method: 'PATCH',
+        data,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    // Get currently authenticated user's profile
+    getProfile: builder.query({
+      query: () => ({
+        url: '/users/profile',
+        method: 'GET',
+      }),
+      transformResponse: (response: any) => {
+        // Normalize backend shapes: sometimes API returns { success, data: { user } } or returns user directly
+        if (!response) return null;
+        if (response.data) return response.data;
+        return response;
+      },
+      providesTags: ['User'],
+    }),
   }),
   overrideExisting: false,
 });
@@ -37,3 +60,9 @@ export const {
   useUpdateUserStatusMutation,
   useUpdateProfileMutation,
 } = usersApi;
+
+// Export the profile hook for convenience
+export const { useGetProfileQuery } = usersApi;
+
+// export the new mutation hook
+export const { useUpdateMyProfileMutation } = usersApi;

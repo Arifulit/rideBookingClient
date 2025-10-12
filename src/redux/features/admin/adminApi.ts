@@ -28,8 +28,9 @@ export const adminApi = createApi({
       const state = getState() as RootState;
       const tokens = state.auth && 'tokens' in state.auth ? (state.auth as any).tokens : undefined;
       if (tokens?.accessToken) {
-        // Use standard Bearer token format and proper capitalization
-        headers.set('Authorization', `Bearer ${tokens.accessToken}`);
+        // Backend expects raw token without 'Bearer ' prefix. Strip if present and set raw token.
+        const tokenClean = String(tokens.accessToken).replace(/^Bearer\s+/i, '');
+        headers.set('Authorization', tokenClean);
         headers.set('content-type', 'application/json');
       }
       return headers;

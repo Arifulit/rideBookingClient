@@ -159,7 +159,7 @@ export const authApi = baseApi.injectEndpoints({
 
     userInfo: builder.query({
       query: () => ({
-        url: "/user/me",
+        url: "/users/profile",
         method: "GET",
       }),
       providesTags: ["User"],
@@ -167,7 +167,7 @@ export const authApi = baseApi.injectEndpoints({
 
     getCurrentUser: builder.query<{ user: User }, void>({
       query: () => ({
-        url: "/user/me",
+        url: "/users/profile",
         method: "GET",
       }),
       providesTags: ["User"],

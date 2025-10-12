@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useGetProfileQuery } from '@/redux/features/user/user.api';
+import { useUpdateRiderProfileMutation } from '@/redux/features/rider/riderApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,16 +29,19 @@ import {
 
 const RiderProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: 'Jane Smith',
-    email: 'jane.smith@example.com',
-    phone: '+1-234-567-8900',
-    address: '123 Rider Street, City, State 12345',
-    joinDate: '2023-08-20',
-    emergencyContactName: 'John Smith',
-    emergencyContactPhone: '+1-234-567-8901',
-    preferredPayment: 'card'
-  });
+  const { data: profileWrapper, isLoading: profileLoading, isError: profileError, refetch } = useGetProfileQuery(undefined);
+  const [updateProfile] = useUpdateRiderProfileMutation();
+
+  const [profileData, setProfileData] = useState(() => ({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    joinDate: '',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    preferredPayment: ''
+  }));
 
   const [stats] = useState({
     totalRides: 47,
@@ -59,9 +64,23 @@ const RiderProfile = () => {
     { id: '3', name: 'Gym', address: '789 Fitness Blvd, Uptown, State 12345' }
   ]);
 
-  const handleSave = () => {
-    setIsEditing(false);
-    console.log('Profile saved:', profileData);
+  const handleSave = async () => {
+    try {
+      console.debug('Submitting profile update', profileData);
+      console.debug('Outgoing PATCH /users/profile payload:', profileData);
+      const res = await updateProfile(profileData).unwrap();
+      console.debug('updateProfile response:', res);
+      setIsEditing(false);
+      console.debug('Profile update successful (client)');
+      await refetch();
+    } catch (err) {
+      console.error('Profile update failed', err);
+      try {
+        console.error('Profile update error (details):', JSON.stringify(err, null, 2));
+      } catch (jsonErr) {
+        console.warn('Failed to stringify profile update error', jsonErr);
+      }
+    }
   };
 
   const handleCancel = () => {
@@ -75,6 +94,33 @@ const RiderProfile = () => {
     }));
   };
 
+  // initialize local state from fetched profile
+  useEffect(() => {
+    const user = profileWrapper?.user || profileWrapper;
+    if (user) {
+      console.debug('Loaded rider profile from API', user);
+      setProfileData({
+        name: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name || '',
+        email: user.email || '',
+        phone: user.phone || user.phoneNumber || '',
+        address: user.address || '',
+        joinDate: user.createdAt || user.joinDate || '',
+        emergencyContactName: user.emergencyContactName || '',
+        emergencyContactPhone: user.emergencyContactPhone || '',
+        preferredPayment: user.preferredPayment || ''
+      });
+    }
+  }, [profileWrapper]);
+
+  // Debug: log raw query state to help diagnose missing profile data
+  useEffect(() => {
+    console.debug('RiderProfile - query state', {
+      profileWrapper,
+      profileLoading,
+      profileError,
+    });
+  }, [profileWrapper, profileLoading, profileError]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -84,10 +130,15 @@ const RiderProfile = () => {
           <p className="text-gray-600">Manage your rider profile and preferences</p>
         </div>
         {!isEditing ? (
-          <Button onClick={() => setIsEditing(true)}>
-            <Edit className="mr-2 h-4 w-4" />
-            Edit Profile
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setIsEditing(true)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Profile
+            </Button>
+            <Button variant="ghost" onClick={() => { refetch(); }}>
+              Refresh
+            </Button>
+          </div>
         ) : (
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleCancel}>
@@ -101,7 +152,9 @@ const RiderProfile = () => {
         )}
       </div>
 
-      {/* Stats Cards */}
+  {/* Stats Cards */}
+  {profileLoading && <div>Loading profile...</div>}
+  {profileError && <div className="text-red-600">Failed to load profile. Check console for details.</div>}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

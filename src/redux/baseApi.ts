@@ -25,6 +25,8 @@ export const baseApi = createApi({
     'Driver', 
     'DriverProfile', 
     'IncomingRequests', 
+    'RideRequests',
+    'RidersList',
     'ActiveRide', 
     'RideHistory', 
     'Earnings', 

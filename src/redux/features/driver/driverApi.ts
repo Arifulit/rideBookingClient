@@ -203,8 +203,8 @@ export const driverApi = baseApi.injectEndpoints({
     updateDriverProfile: builder.mutation<DriverProfile, Partial<DriverProfile>>({
       query: (profileData) => ({
         url: '/driver/profile',
-        method: 'PUT',
-        body: profileData,
+        method: 'PATCH',
+        data: profileData,
       }),
       invalidatesTags: ['DriverProfile'],
     }),
@@ -214,7 +214,7 @@ export const driverApi = baseApi.injectEndpoints({
       query: (isAvailable) => ({
         url: '/driver/availability',
         method: 'PATCH',
-        body: { isAvailable },
+        data: { isAvailable },
       }),
       invalidatesTags: ['DriverProfile'],
     }),
@@ -223,8 +223,8 @@ export const driverApi = baseApi.injectEndpoints({
     updateDriverOnlineStatus: builder.mutation<{ isOnline: boolean; message: string }, boolean>({
       query: (isOnline) => ({
         url: '/driver/online-status',
-        method: 'PUT',
-        body: { isOnline },
+        method: 'PATCH',
+        data: { isOnline },
       }),
       invalidatesTags: ['DriverProfile'],
     }),
@@ -241,7 +241,7 @@ export const driverApi = baseApi.injectEndpoints({
       query: (locationData) => ({
         url: '/driver/location',
         method: 'PATCH',
-        body: locationData,
+        data: locationData,
       }),
       invalidatesTags: ['DriverProfile'],
     }),
@@ -250,6 +250,41 @@ export const driverApi = baseApi.injectEndpoints({
     getIncomingRequests: builder.query<RideRequest[], void>({
       query: () => ({ url: '/driver/rides/pending' }),
       providesTags: ['IncomingRequests'],
+    }),
+
+    // Get all ride requests / showAll (backend endpoint given by user)
+    // Example backend: /api/v1/driver/rides/requests?showAll=true
+    getRideRequests: builder.query<RideRequest[], { showAll?: boolean } | void>({
+      query: (params = { showAll: true }) => ({ url: '/driver/rides/requests', params }),
+      // Normalize and log backend responses so frontend receives a stable array shape
+      transformResponse: (response: unknown) => {
+        // Log raw response in browser devtools for easier debugging
+        console.debug('driverApi.getRideRequests - raw response:', response);
+
+        if (!response) return [] as RideRequest[];
+        if (Array.isArray(response)) {
+          console.debug('driverApi.getRideRequests - normalized (array):', response);
+          return response as RideRequest[];
+        }
+        if (typeof response === 'object' && response !== null) {
+          const obj = response as Record<string, unknown>;
+          if (Array.isArray(obj.data)) {
+            console.debug('driverApi.getRideRequests - normalized (data):', obj.data);
+            return obj.data as RideRequest[];
+          }
+          if (Array.isArray(obj.requests)) {
+            console.debug('driverApi.getRideRequests - normalized (requests):', obj.requests);
+            return obj.requests as RideRequest[];
+          }
+          const firstArray = Object.values(obj).find((v) => Array.isArray(v));
+          if (Array.isArray(firstArray)) {
+            console.debug('driverApi.getRideRequests - normalized (firstArray):', firstArray);
+            return firstArray as RideRequest[];
+          }
+        }
+        return [] as RideRequest[];
+      },
+      providesTags: ['IncomingRequests', 'RideRequests'],
     }),
 
     // Accept ride request (global ride router)
@@ -448,6 +483,7 @@ export const {
   useUpdateDriverOnlineStatusMutation,
   useUpdateDriverLocationMutation,
   useGetIncomingRequestsQuery,
+  useGetRideRequestsQuery,
   useAcceptRideRequestMutation,
   useRejectRideRequestMutation,
   useGetActiveRideQuery,

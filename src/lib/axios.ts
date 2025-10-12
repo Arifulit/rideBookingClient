@@ -125,8 +125,9 @@ axiosInstance.interceptors.request.use(
       try {
       const token = localStorage.getItem("accessToken") || localStorage.getItem("token");
       if (token && request.headers) {
-        // Use token directly (no 'Bearer ' prefix)
-        request.headers.Authorization = `${token}`;
+        // Ensure we send raw token without 'Bearer ' prefix — backend expects the raw token
+        const tokenClean = String(token).replace(/^Bearer\s+/i, '');
+        request.headers.Authorization = `${tokenClean}`;
       }
     } catch {
       // ignore storage read errors
@@ -241,7 +242,8 @@ axiosInstance.interceptors.response.use(
           })
             .then((token) => {
               if (token && originalRequest.headers) {
-                originalRequest.headers.Authorization = `Bearer ${token}`;
+                // Attach raw token (no 'Bearer ' prefix)
+                originalRequest.headers.Authorization = String(token).replace(/^Bearer\s+/i, '');
               }
               return axiosInstance(originalRequest);
             })
@@ -280,7 +282,8 @@ axiosInstance.interceptors.response.use(
 
               // Retry original request with new token
               if (newAccess && originalRequest.headers) {
-                originalRequest.headers.Authorization = `Bearer ${newAccess}`;
+                // Attach raw token (no 'Bearer ' prefix)
+                originalRequest.headers.Authorization = String(newAccess).replace(/^Bearer\s+/i, '');
               }
               resolve(axiosInstance(originalRequest));
             } catch (errRefresh) {

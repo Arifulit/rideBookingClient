@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 
 import CommonLayout from "./components/layout/CommonLayout";
 import { useAuthInitialization } from "./hooks/useAuthInitialization";
+import AuthTokenLogger from "./components/auth/AuthTokenLogger";
 
 function App() {
   const { isInitializing } = useAuthInitialization();
@@ -26,6 +27,7 @@ function App() {
 
   return (
     <CommonLayout>
+      <AuthTokenLogger />
       <Outlet />
       <Toaster 
         position="top-right"

@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useGetProfileQuery } from '@/redux/features/user/user.api';
+import { useUpdateDriverProfileMutation } from '@/redux/features/driver/driverApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,20 +27,23 @@ import {
 
 const DriverProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: 'John Wilson',
-    email: 'john.wilson@rideshare.com',
-    phone: '+1-234-567-8900',
-    address: '456 Driver Avenue, City, State 12345',
-    joinDate: '2023-06-15',
-    licenseNumber: 'DL123456789',
-    licenseExpiry: '2027-06-15',
-    vehicleMake: 'Toyota',
-    vehicleModel: 'Camry',
-    vehicleYear: '2021',
-    vehiclePlate: 'ABC-1234',
-    vehicleColor: 'Silver'
-  });
+  const { data: profileWrapper, isLoading: profileLoading, isError: profileError, refetch } = useGetProfileQuery(undefined);
+  const [updateProfile] = useUpdateDriverProfileMutation();
+
+  const [profileData, setProfileData] = useState(() => ({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    joinDate: '',
+    licenseNumber: '',
+    licenseExpiry: '',
+    vehicleMake: '',
+    vehicleModel: '',
+    vehicleYear: '',
+    vehiclePlate: '',
+    vehicleColor: ''
+  }));
 
   const [stats] = useState({
     totalRides: 1247,
@@ -49,9 +54,16 @@ const DriverProfile = () => {
     activeHours: '156 hrs'
   });
 
-  const handleSave = () => {
-    setIsEditing(false);
-    console.log('Profile saved:', profileData);
+  const handleSave = async () => {
+    try {
+      console.debug('Submitting driver profile update', profileData);
+      await updateProfile(profileData).unwrap();
+      setIsEditing(false);
+      console.debug('Driver profile updated');
+      refetch();
+    } catch (err) {
+      console.error('Driver profile update failed', err);
+    }
   };
 
   const handleCancel = () => {
@@ -64,6 +76,27 @@ const DriverProfile = () => {
       [field]: value
     }));
   };
+
+  useEffect(() => {
+    const user = profileWrapper?.user || profileWrapper;
+    if (user) {
+      console.debug('Loaded driver profile from API', user);
+      setProfileData({
+        name: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        address: user.address || '',
+        joinDate: user.createdAt || user.joinDate || '',
+        licenseNumber: user.licenseNumber || '',
+        licenseExpiry: user.licenseExpiry || '',
+        vehicleMake: user.vehicle?.make || user.vehicleMake || '',
+        vehicleModel: user.vehicle?.model || user.vehicleModel || '',
+        vehicleYear: user.vehicle?.year || user.vehicleYear || '',
+        vehiclePlate: user.vehicle?.plate || user.vehiclePlate || '',
+        vehicleColor: user.vehicle?.color || user.vehicleColor || ''
+      });
+    }
+  }, [profileWrapper]);
 
   return (
     <div className="space-y-6">
@@ -91,7 +124,9 @@ const DriverProfile = () => {
         )}
       </div>
 
-      {/* Stats Cards */}
+  {/* Stats Cards */}
+  {profileLoading && <div>Loading profile...</div>}
+  {profileError && <div className="text-red-600">Failed to load driver profile. Check console for details.</div>}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

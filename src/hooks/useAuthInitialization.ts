@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '@/redux/hook';
-import { useGetCurrentUserQuery } from '@/redux/features/auth/authApi';
+import { useGetProfileQuery } from '@/redux/features/user/user.api';
 import { User } from '@/types';
 import { 
   setCredentials as loginSuccess,
@@ -23,13 +23,16 @@ export const useAuthInitialization = () => {
 
   // Query to validate current user (only runs if we have tokens)
   const {
-    data: currentUser,
+    data: profileWrapper,
     isLoading: isValidatingUser,
     error: userError,
     refetch: validateUser,
-  } = useGetCurrentUserQuery(undefined, {
+  } = useGetProfileQuery(undefined, {
     skip: !tokens?.accessToken,
   });
+
+  // Normalize backend shape: sometimes returns { user } inside data or returns user directly
+  const fetchedUser = profileWrapper && (profileWrapper.user || profileWrapper) as unknown as User | null;
 
   // Initialize auth state from storage on app start
   useEffect(() => {
@@ -63,10 +66,10 @@ export const useAuthInitialization = () => {
       // If we have tokens but user validation failed, clear auth state
       console.log('Auth tokens invalid, clearing auth state');
       dispatch(clearAuthState());
-    } else if (tokens && currentUser && !isAuthenticated) {
+    } else if (tokens && fetchedUser && !isAuthenticated) {
       // If we have valid user data but not authenticated, update auth state
       dispatch(loginSuccess({
-        user: (currentUser as { user: User }).user,
+        user: fetchedUser,
         tokens: {
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
@@ -76,7 +79,7 @@ export const useAuthInitialization = () => {
         rememberMe: localStorage.getItem('rememberMe') === 'true',
       }));
     }
-  }, [tokens, userError, currentUser, isAuthenticated, dispatch]);
+  }, [tokens, userError, fetchedUser, isAuthenticated, dispatch]);
 
   // Auto-refresh user data periodically (every 5 minutes)
   useEffect(() => {
@@ -92,6 +95,6 @@ export const useAuthInitialization = () => {
   return {
     isInitializing: isValidatingUser && !!tokens?.accessToken,
     isAuthenticated,
-    user: currentUser,
+    user: fetchedUser,
   };
 };
