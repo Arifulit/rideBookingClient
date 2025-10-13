@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { 
   Mail, 
@@ -44,6 +45,16 @@ const DriverProfile = () => {
     vehiclePlate: '',
     vehicleColor: ''
   }));
+
+  const { toast } = useToast();
+
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+
+  const [passwordUpdating, setPasswordUpdating] = useState(false);
 
   const [stats] = useState({
     totalRides: 1247,
@@ -193,6 +204,7 @@ const DriverProfile = () => {
               <TabsTrigger value="personal">Personal Info</TabsTrigger>
               <TabsTrigger value="vehicle">Vehicle Info</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
+              <TabsTrigger value="security">Security</TabsTrigger>
             </TabsList>
 
             <TabsContent value="personal">
@@ -353,6 +365,85 @@ const DriverProfile = () => {
                         <div className="text-sm text-gray-500">Completed 6 months ago</div>
                       </div>
                       <Badge className="bg-green-100 text-green-800">Clear</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="security">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Security</CardTitle>
+                  <CardDescription>
+                    Change your password and manage security settings
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="currentPassword">Current Password</Label>
+                      <Input
+                        id="currentPassword"
+                        type="password"
+                        value={passwordData.currentPassword}
+                        onChange={(e) => setPasswordData(p => ({ ...p, currentPassword: e.target.value }))}
+                        disabled={passwordUpdating}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="newPassword">New Password</Label>
+                      <Input
+                        id="newPassword"
+                        type="password"
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData(p => ({ ...p, newPassword: e.target.value }))}
+                        disabled={passwordUpdating}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData(p => ({ ...p, confirmPassword: e.target.value }))}
+                        disabled={passwordUpdating}
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={async () => {
+                          if (passwordData.newPassword !== passwordData.confirmPassword) {
+                            try { toast({ title: 'Validation', description: 'New password and confirmation do not match', variant: 'destructive' }); } catch(e) { console.debug(e); }
+                            return;
+                          }
+                          if (!passwordData.currentPassword || !passwordData.newPassword) {
+                            try { toast({ title: 'Validation', description: 'Please fill all password fields', variant: 'destructive' }); } catch(e) { console.debug(e); }
+                            return;
+                          }
+                          setPasswordUpdating(true);
+                          try {
+                            // Backend may expect currentPassword and password/newPassword fields
+                            await updateProfile({ password: passwordData.newPassword }).unwrap();
+                            try { toast({ title: 'Success', description: 'Password updated' }); } catch(e) { console.debug(e); }
+                            setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                          } catch (err) {
+                            console.error('Password update failed', err);
+                            try { toast({ title: 'Error', description: 'Failed to update password', variant: 'destructive' }); } catch(e) { console.debug(e); }
+                          } finally {
+                            setPasswordUpdating(false);
+                          }
+                        }}
+                        disabled={passwordUpdating}
+                      >
+                        Update Password
+                      </Button>
+                      <Button variant="outline" onClick={() => setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })}>
+                        Reset
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

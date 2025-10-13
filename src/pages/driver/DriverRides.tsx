@@ -1,14 +1,22 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect, useMemo } from 'react';
+import { toast as sonnerToast } from 'sonner';
+import { useAppDispatch, useAppSelector } from '@/redux/hook';
+import { updateAvailabilityStatus } from '@/redux/features/driver/driverSlice';
+import { apiConfig } from '@/config/env';
 import {
   useGetRideHistoryQuery,
   useGetActiveRideQuery,
   useUpdateRideStatusMutation,
   useCompleteRideMutation,
   useGetRideRequestsQuery,
+  useUpdateDriverOnlineStatusMutation,
 } from '@/redux/features/driver/driverApi';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+// module-scoped map to hold delayed action timers (keyed by ride id)
+const delayedActionTimersMap: Record<string, number> = {};
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -28,6 +36,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
   Car,
   Search,
@@ -51,15 +60,12 @@ interface Ride {
   destination: string;
   fare: number;
   status:
-    | 'pending'
-    | 'accepted'
-    | 'picked_up'
-    | 'in_transit'
-    | 'completed'
-    | 'cancelled'
-    | 'driver-arriving'
-    | 'driver-arrived'
-    | 'in-progress';
+  | 'accepted'
+  | 'rejected'
+  | 'picked_up'
+  | 'in_transit'
+  | 'completed'
+  | 'cancelled';
   paymentMethod: 'cash' | 'card' | 'wallet';
   createdAt: string;
   completedAt?: string;
@@ -71,7 +77,9 @@ const DriverRides = (): JSX.Element => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [isOnline, setIsOnline] = useState(false);
+
+  const dispatch = useAppDispatch();
+  const isOnline = useAppSelector((s) => s.driver.isOnline);
 
   const { data: activeRide, refetch: refetchActiveRide, isLoading: activeLoading } = useGetActiveRideQuery();
   const { data: rideHistory, isLoading: historyLoading } = useGetRideHistoryQuery({ page: 1, limit: 50 });
@@ -84,9 +92,18 @@ const DriverRides = (): JSX.Element => {
     refetch: refetchRequests,
   } = useGetRideRequestsQuery({ showAll: true } as { showAll?: boolean });
 
-  const [updateRideStatus] = useUpdateRideStatusMutation();
-  const [completeRide] = useCompleteRideMutation();
-  const { toast } = useToast();
+  const [updateRideStatus, { isLoading: updatingStatus }] = useUpdateRideStatusMutation();
+  const [completeRide, { isLoading: completingRide }] = useCompleteRideMutation();
+  const [updateOnlineStatus, { isLoading: updatingOnline }] = useUpdateDriverOnlineStatusMutation();
+  
+  // use Sonner global toast for immediate notifications
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
+  const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, string>>({});
+  // timers for delayed server-side actions (e.g., undoable cancel)
+  // using a module-scoped map so timers persist across renders
+  // (defined below as `delayedActionTimersMap`)
+  
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
@@ -101,7 +118,8 @@ const DriverRides = (): JSX.Element => {
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = String(token).replace(/^Bearer\s+/i, '');
-        const resp = await fetch('http://localhost:5000/api/v1/driver/rides/requests?showAll=true', {
+        const base = (apiConfig?.baseURL ?? import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000/api/v1').replace(/\/$/, '');
+        const resp = await fetch(`${base}/driver/rides/requests?showAll=true`, {
           method: 'GET',
           headers,
           credentials: 'include',
@@ -116,6 +134,26 @@ const DriverRides = (): JSX.Element => {
       }
     })();
   }, []);
+
+  // Helper to set online status (optimistic update + backend sync)
+  const setOnline = async (val: boolean) => {
+    const prev = isOnline;
+    try {
+      // optimistic update
+      dispatch(updateAvailabilityStatus({ isOnline: val }));
+      const res = await updateOnlineStatus(val).unwrap();
+      sonnerToast.success(`${res?.message ?? 'Status updated'} — ${val ? 'You are now online' : 'You are now offline'}`);
+    } catch (err) {
+      console.error('updateOnlineStatus failed', err);
+      // revert
+      dispatch(updateAvailabilityStatus({ isOnline: prev }));
+      sonnerToast.error('Could not update status — Please try again');
+    }
+  };
+
+  const toggleOnline = async () => {
+    await setOnline(!isOnline);
+  };
 
   // rate-limit retry handling
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
@@ -157,20 +195,21 @@ const DriverRides = (): JSX.Element => {
     const list: Ride[] = [];
 
     if (activeRide) {
+      const ar = activeRide as any;
       list.push({
-        id: (activeRide.id ?? activeRide._id ?? String(Math.random())) as string,
-        riderId: activeRide.riderId ?? (activeRide.rider?._id ?? ''),
-        riderName: `${activeRide.rider?.firstName ?? 'Unknown'} ${activeRide.rider?.lastName ?? ''}`.trim(),
+        id: (ar.id ?? ar._id ?? String(Math.random())) as string,
+        riderId: ar.riderId ?? (ar.rider?._id ?? ''),
+        riderName: `${ar.rider?.firstName ?? 'Unknown'} ${ar.rider?.lastName ?? ''}`.trim(),
         riderRating: undefined,
-        pickup: activeRide.pickupLocation?.address ?? activeRide.pickupAddress ?? 'Unknown pickup',
-        destination: activeRide.destinationLocation?.address ?? activeRide.destinationAddress ?? 'Unknown destination',
-        fare: activeRide.fare?.total ?? 0,
-        status: (activeRide.status as Ride['status']) ?? 'in-progress',
-        paymentMethod: (activeRide.paymentMethod ?? 'card') as Ride['paymentMethod'],
-        createdAt: activeRide.acceptedAt ?? (activeRide.createdAt ?? new Date().toISOString()),
-        completedAt: activeRide.completedAt,
-        distance: activeRide.actualDistance ?? activeRide.estimatedDistance ?? 0,
-        duration: activeRide.actualDuration ?? activeRide.estimatedDuration ?? 0,
+        pickup: ar.pickupLocation?.address ?? ar.pickupAddress ?? 'Unknown pickup',
+        destination: ar.destinationLocation?.address ?? ar.destinationAddress ?? 'Unknown destination',
+        fare: ar.fare?.total ?? 0,
+        status: (ar.status as Ride['status']) ?? 'accepted',
+        paymentMethod: (ar.paymentMethod ?? 'card') as Ride['paymentMethod'],
+        createdAt: ar.acceptedAt ?? (ar.createdAt ?? new Date().toISOString()),
+        completedAt: ar.completedAt,
+        distance: ar.actualDistance ?? ar.estimatedDistance ?? 0,
+        duration: ar.actualDuration ?? ar.estimatedDuration ?? 0,
       });
     }
 
@@ -209,10 +248,14 @@ const DriverRides = (): JSX.Element => {
 
       if (items.length > 0) {
         const mapStatus = (s?: string) => {
-          if (!s) return 'pending';
-          if (s === 'requested') return 'pending';
-          if (s === 'rejected') return 'cancelled';
-          return s as Ride['status'];
+          if (!s) return 'accepted';
+          const raw = String(s);
+          // normalize snake_case -> hyphen for UI friendliness, map known aliases
+          const snake = raw.replace(/-/g, '_');
+          if (snake === 'requested') return 'accepted';
+          if (snake === 'rejected') return 'rejected';
+          // keep original form (some backends return snake_case, some hyphenated)
+          return raw as Ride['status'];
         };
 
         const requestsAsRides: Ride[] = items.map((rr) => {
@@ -261,6 +304,81 @@ const DriverRides = (): JSX.Element => {
     return list;
   }, [activeRide, rideHistory, rideRequestsData]);
 
+  // Helper to normalize a status string to snake_case for comparisons with backend enums
+  const normalizeStatus = (s?: string) => (s ? String(s).replace(/-/g, '_') : '');
+
+  const formatStatusLabel = (s?: string) => {
+    if (!s) return '';
+    // Convert snake_case or hyphen-case to Title Case
+    const parts = String(s).replace(/_/g, ' ').replace(/-/g, ' ').split(' ');
+    return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+  };
+
+  // Show a non-blocking confirmation toast using Sonner and return true if user confirms.
+  type ConfirmVariant = 'default' | 'success' | 'error';
+  // Show a non-blocking confirmation toast using Sonner and return true if user confirms.
+  // variant: 'success' -> green, 'error' -> red
+  const showConfirmToast = (message: string, actionLabel = 'Confirm', duration = 8000, variant: ConfirmVariant = 'default'): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(() => {
+        // auto-cancel after duration
+        resolve(false);
+      }, duration);
+
+      const renderToast = () => {
+        if (variant === 'success') {
+          sonnerToast.success(message, {
+            description: '',
+            action: {
+              label: actionLabel,
+              onClick: () => {
+                clearTimeout(timer);
+                resolve(true);
+              },
+            },
+            duration,
+          });
+        } else if (variant === 'error') {
+          sonnerToast.error(message, {
+            description: '',
+            action: {
+              label: actionLabel,
+              onClick: () => {
+                clearTimeout(timer);
+                resolve(true);
+              },
+            },
+            duration,
+          });
+        } else {
+          sonnerToast(message, {
+            description: '',
+            action: {
+              label: actionLabel,
+              onClick: () => {
+                clearTimeout(timer);
+                resolve(true);
+              },
+            },
+            duration,
+          });
+        }
+      };
+
+      renderToast();
+    });
+  };
+
+  // Full allowed statuses (UI uses hyphenated forms to match Ride type); driverApi will normalize to snake_case before sending.
+  const ALL_STATUSES: Ride['status'][] = [
+    'accepted',
+    'rejected',
+    'picked_up',
+    'in_transit',
+    'completed',
+    'cancelled',
+  ];
+
   const filteredRides = useMemo(() => {
     const term = debouncedSearch.toLowerCase();
     return rides.filter((ride) => {
@@ -278,12 +396,10 @@ const DriverRides = (): JSX.Element => {
     switch (status) {
       case 'completed': return 'bg-green-100 text-green-800';
       case 'in_transit': return 'bg-blue-100 text-blue-800';
-      case 'in-progress': return 'bg-blue-100 text-blue-800';
       case 'driver-arriving': return 'bg-yellow-100 text-yellow-800';
       case 'driver-arrived': return 'bg-yellow-100 text-yellow-800';
       case 'picked_up': return 'bg-purple-100 text-purple-800';
       case 'accepted': return 'bg-yellow-100 text-yellow-800';
-      case 'pending': return 'bg-orange-100 text-orange-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -301,7 +417,7 @@ const DriverRides = (): JSX.Element => {
   const statsData = useMemo(() => ({
     total: rides.length,
     completed: rides.filter(r => r.status === 'completed').length,
-    active: rides.filter(r => ['accepted', 'picked_up', 'in_transit', 'in-progress'].includes(r.status)).length,
+    active: rides.filter(r => ['accepted', 'picked_up', 'in_transit'].includes(r.status)).length,
     cancelled: rides.filter(r => r.status === 'cancelled').length,
     totalEarned: rides.filter(r => r.status === 'completed').reduce((sum, r) => sum + (r.fare || 0), 0),
   }), [rides]);
@@ -317,9 +433,9 @@ const DriverRides = (): JSX.Element => {
           <p className="text-gray-600">Manage your driving history and current rides</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant={isOnline ? 'ghost' : 'default'} onClick={() => setIsOnline(v => !v)}>
+          <Button variant={isOnline ? 'ghost' : 'default'} onClick={toggleOnline} disabled={updatingOnline}>
             <Car className="mr-2 h-4 w-4" />
-            {isOnline ? 'Go Offline' : 'Go Online'}
+            {updatingOnline ? (isOnline ? 'Going Offline...' : 'Going Online...') : (isOnline ? 'Go Offline' : 'Go Online')}
           </Button>
         </div>
       </div>
@@ -397,7 +513,7 @@ const DriverRides = (): JSX.Element => {
             <div className="flex-1 max-w-md relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search rides by ID, rider, pickup or destination..."
+                placeholder="Search rides by rider, pickup or destination..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -428,21 +544,18 @@ const DriverRides = (): JSX.Element => {
               </Button>
             </div>
           </div>
-
-          <CardDescription className="mt-2">View and manage driving assignments — requests (if any) are shown above history</CardDescription>
         </CardHeader>
 
         <CardContent>
           <div className="mb-4 text-xs text-gray-500">
             Status: {requestsLoading || requestsFetching ? 'loading' : requestsError ? 'error' : 'idle'}
-            {requestsErrorObj && <span className="ml-4 text-red-600">Error: {(requestsErrorObj as any)?.message ?? 'See console'}</span>}
+            {Boolean(requestsErrorObj) && <span className="ml-4 text-red-600">Error: {String((requestsErrorObj as any)?.message ?? 'See console')}</span>}
           </div>
 
           <div className="overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ride ID</TableHead>
                   <TableHead>Rider</TableHead>
                   <TableHead>Route</TableHead>
                   <TableHead>Status</TableHead>
@@ -453,10 +566,9 @@ const DriverRides = (): JSX.Element => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                { (requestsLoading || activeLoading || historyLoading) && filteredRides.length === 0 ? (
+                {(requestsLoading || activeLoading || historyLoading) && filteredRides.length === 0 ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={`skel-${i}`}>
-                      <TableCell className="animate-pulse bg-gray-100 h-6" />
                       <TableCell className="animate-pulse bg-gray-100 h-6" />
                       <TableCell className="animate-pulse bg-gray-100 h-6" />
                       <TableCell className="animate-pulse bg-gray-100 h-6" />
@@ -469,7 +581,6 @@ const DriverRides = (): JSX.Element => {
                 ) : (
                   filteredRides.map((ride) => (
                     <TableRow key={ride.id}>
-                      <TableCell className="font-medium">{ride.id}</TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           <User className="h-4 w-4 text-gray-400" />
@@ -499,9 +610,98 @@ const DriverRides = (): JSX.Element => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(ride.status)}>
-                          {String(ride.status ?? '').replace('_', ' ').toUpperCase()}
-                        </Badge>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="flex items-center gap-2">
+                              <Badge className={getStatusColor(optimisticStatuses[ride.id] ?? ride.status)}>
+                                {formatStatusLabel(optimisticStatuses[ride.id] ?? ride.status)}
+                              </Badge>
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                            {/* If ride was a request, the Accept/Reject options are shown in the Actions menu below. */}
+
+                            {/* Accepted: Cancel */}
+                            {normalizeStatus(ride.status) === 'accepted' && (
+                              <>
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={async () => {
+                                    if (updatingStatus) return;
+                                    // optimistic UI update
+                                    setOptimisticStatuses((s) => ({ ...s, [ride.id]: 'cancelled' }));
+
+                                    // show an undoable toast and delay the server request
+                                    const DELAY_MS = 6000; // 6s to allow undo
+                                    const timerId = window.setTimeout(async () => {
+                                      try {
+                                        await updateRideStatus({ rideId: ride.id, status: 'cancelled' }).unwrap();
+                                        sonnerToast.success('Ride cancelled — Ride has been cancelled.');
+                                        try { refetchActiveRide(); } catch { /* ignore */ }
+                                      } catch (err) {
+                                        console.error('updateRideStatus(cancel) failed', err);
+                                        sonnerToast.error('Error — Could not cancel ride');
+                                        // revert optimistic on failure
+                                        setOptimisticStatuses((s) => { const c = { ...s }; delete c[ride.id]; return c; });
+                                        } finally {
+                                        delete delayedActionTimersMap[ride.id];
+                                      }
+                                    }, DELAY_MS);
+
+                                    delayedActionTimersMap[ride.id] = timerId;
+
+                                    sonnerToast(`Ride will be cancelled`, {
+                                      description: 'You can undo this action within a few seconds.',
+                                      action: {
+                                        label: 'Undo',
+                                        onClick: () => {
+                                          // cancel pending timer and revert optimistic status
+                                          const t = delayedActionTimersMap[ride.id];
+                                          if (t) {
+                                            clearTimeout(t);
+                                            delete delayedActionTimersMap[ride.id];
+                                          }
+                                          setOptimisticStatuses((s) => { const c = { ...s }; delete c[ride.id]; return c; });
+                                          sonnerToast.success('Undo — Ride cancellation aborted.');
+                                        },
+                                      },
+                                      duration: 6000,
+                                    });
+                                  }}
+                                  disabled={updatingStatus}
+                                >
+                                  {updatingStatus ? 'Processing...' : 'Cancel Ride'}
+                                </DropdownMenuItem>
+                              </>
+                            )}
+
+                            {/* In-progress / In-transit: Complete */}
+                            {(normalizeStatus(ride.status) === 'in_transit') && (
+                              <DropdownMenuItem
+                                className="text-green-600"
+                                onClick={async () => {
+                                  if (completingRide) return;
+                                  // optimistic
+                                  setOptimisticStatuses((s) => ({ ...s, [ride.id]: 'completed' }));
+                                  try {
+                                    await completeRide({ rideId: ride.id, finalLocation: { latitude: 0, longitude: 0 } }).unwrap();
+                                    sonnerToast.success('Ride completed — Ride marked as completed.');
+                                    refetchActiveRide();
+                                  } catch {
+                                    sonnerToast.error('Error — Could not complete ride');
+                                  } finally {
+                                    setOptimisticStatuses((s) => { const c = { ...s }; delete c[ride.id]; return c; });
+                                  }
+                                }}
+                                disabled={completingRide}
+                              >
+                                {completingRide ? 'Completing...' : 'Complete Ride'}
+                              </DropdownMenuItem>
+                            )}
+
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                       <TableCell>
                         {ride.status === 'cancelled' ? <span className="text-gray-400">-</span> : <span className="font-medium">${ride.fare.toFixed(2)}</span>}
@@ -528,81 +728,119 @@ const DriverRides = (): JSX.Element => {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem>View Details</DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedRide(ride);
+                                setDetailsOpen(true);
+                              }}
+                            >
+                              View Details
+                            </DropdownMenuItem>
+                            {/* Accept/Reject handled from requests list when applicable. */}
                             {ride.status === 'completed' && <>
                               <DropdownMenuItem>Download Receipt</DropdownMenuItem>
                               <DropdownMenuItem>Rate Rider</DropdownMenuItem>
                             </>}
                             <DropdownMenuSeparator />
+                            <DropdownMenuLabel>All statuses</DropdownMenuLabel>
+                            {ALL_STATUSES.map((s) => (
+                              <DropdownMenuItem
+                                key={s}
+                                onClick={async () => {
+                                  if (updatingStatus) return;
+                                  try {
+                                    // Ask user to confirm via a professional toast instead of blocking confirm()
+                                    if (s === 'completed') {
+                                      const ok = await showConfirmToast('Mark this ride as completed?', 'Confirm', 8000, 'success');
+                                      if (!ok) return;
+                                    }
+                                    if (s === 'cancelled') {
+                                      const ok = await showConfirmToast('Cancel this ride?', 'Confirm', 8000, 'error');
+                                      if (!ok) return;
+                                    }
+                                    // cast to any to satisfy backend payload typing (driverApi normalizes string to snake_case)
+                                    await updateRideStatus({ rideId: ride.id, status: s as any }).unwrap();
+                                    sonnerToast.success(`Status updated — ${formatStatusLabel(s)} applied.`);
+                                    refetchActiveRide();
+                                  } catch (err) {
+                                    console.error('updateRideStatus failed', err);
+                                    sonnerToast.error(`Error — Could not set status to ${formatStatusLabel(s)}`);
+                                  }
+                                }}
+                                disabled={updatingStatus}
+                              >
+                                {formatStatusLabel(s)}
+                              </DropdownMenuItem>
+                            ))}
                             {ride.status !== 'completed' && ride.status !== 'cancelled' && (
                               <DropdownMenuItem>Contact Rider</DropdownMenuItem>
                             )}
-                            {(ride.status === 'accepted' || ride.status === 'driver-arriving') && (
-                              <DropdownMenuItem
-                                className="text-blue-600"
-                                onClick={async () => {
-                                  try {
-                                    await updateRideStatus({ rideId: ride.id, status: 'driver-arrived' }).unwrap();
-                                    toast({ title: 'Marked arrived', description: 'Driver has arrived at pickup.' });
-                                    refetchActiveRide();
-                                  } catch {
-                                    toast({ title: 'Error', description: 'Could not mark arrived', variant: 'destructive' });
-                                  }
-                                }}
-                              >
-                                Mark Arrived
-                              </DropdownMenuItem>
-                            )}
-                            {ride.status === 'driver-arrived' && (
-                              <DropdownMenuItem
-                                className="text-purple-600"
-                                onClick={async () => {
-                                  try {
-                                    await updateRideStatus({ rideId: ride.id, status: 'in-progress' }).unwrap();
-                                    toast({ title: 'Picked up', description: 'Ride is now in progress.' });
-                                    refetchActiveRide();
-                                  } catch {
-                                    toast({ title: 'Error', description: 'Could not start trip', variant: 'destructive' });
-                                  }
-                                }}
-                              >
-                                Pick Up Rider
-                              </DropdownMenuItem>
-                            )}
-                            {(ride.status === 'in_transit' || ride.status === 'in-progress') && (
+                            {/* removed driver-arriving/driver-arrived specific actions per request */}
+                            {(normalizeStatus(ride.status) === 'in_transit') && (
                               <DropdownMenuItem
                                 className="text-green-600"
                                 onClick={async () => {
+                                  if (completingRide) return;
                                   try {
                                     await completeRide({ rideId: ride.id, finalLocation: { latitude: 0, longitude: 0 } }).unwrap();
-                                    toast({ title: 'Ride completed', description: 'Ride marked as completed.' });
+                                    sonnerToast.success('Ride completed — Ride marked as completed.');
                                     refetchActiveRide();
                                   } catch {
-                                    toast({ title: 'Error', description: 'Could not complete ride', variant: 'destructive' });
+                                    sonnerToast.error('Error — Could not complete ride');
                                   }
                                 }}
+                                disabled={completingRide}
                               >
-                                Complete Ride
+                                {completingRide ? 'Completing...' : 'Complete Ride'}
                               </DropdownMenuItem>
                             )}
                             {ride.status !== 'completed' && ride.status !== 'cancelled' && (
                               <DropdownMenuItem
                                 className="text-red-600"
                                 onClick={async () => {
-                                  try {
-                                    if (!confirm('Are you sure you want to cancel this ride?')) return;
-                                    await updateRideStatus({ rideId: ride.id, status: 'cancelled' }).unwrap();
-                                    toast({ title: 'Ride cancelled', description: 'Ride has been cancelled.' });
-                                    refetchActiveRide();
-                                  } catch {
-                                    toast({ title: 'Error', description: 'Could not cancel ride', variant: 'destructive' });
-                                  }
+                                  if (updatingStatus) return;
+                                  // optimistic update
+                                  setOptimisticStatuses((s) => ({ ...s, [ride.id]: 'cancelled' }));
+
+                                  const DELAY_MS = 6000;
+                                  const timerId = window.setTimeout(async () => {
+                                    try {
+                                      await updateRideStatus({ rideId: ride.id, status: 'cancelled' }).unwrap();
+                                      sonnerToast.success('Ride cancelled — Ride has been cancelled.');
+                                      try { refetchActiveRide(); } catch { /* ignore */ }
+                                    } catch (err) {
+                                      console.error('updateRideStatus(cancel) failed', err);
+                                      sonnerToast.error('Error — Could not cancel ride');
+                                      setOptimisticStatuses((s) => { const c = { ...s }; delete c[ride.id]; return c; });
+                                    } finally {
+                                      delete delayedActionTimersMap[ride.id];
+                                    }
+                                    }, DELAY_MS);
+
+                                  delayedActionTimersMap[ride.id] = timerId;
+
+                                  sonnerToast(`Ride will be cancelled`, {
+                                    description: 'You can undo this action within a few seconds.',
+                                    action: {
+                                      label: 'Undo',
+                                      onClick: () => {
+                                        const t = delayedActionTimersMap[ride.id];
+                                        if (t) {
+                                          clearTimeout(t);
+                                          delete delayedActionTimersMap[ride.id];
+                                        }
+                                        setOptimisticStatuses((s) => { const c = { ...s }; delete c[ride.id]; return c; });
+                                        sonnerToast.success('Undo — Ride cancellation aborted.');
+                                      },
+                                    },
+                                    duration: 6000,
+                                  });
                                 }}
+                                disabled={updatingStatus}
                               >
-                                Cancel Ride
+                                {updatingStatus ? 'Processing...' : 'Cancel Ride'}
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem>Report Issue</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -624,15 +862,64 @@ const DriverRides = (): JSX.Element => {
                 }
               </p>
               {!searchTerm && selectedStatus === 'all' && (
-                <Button onClick={() => setIsOnline(true)}>
+                <Button onClick={() => setOnline(true)} disabled={updatingOnline}>
                   <Car className="mr-2 h-4 w-4" />
-                  Go Online Now
+                  {updatingOnline ? 'Updating...' : 'Go Online Now'}
                 </Button>
               )}
             </div>
           )}
         </CardContent>
       </Card>
+      {/* Ride Details Dialog */}
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ride Details</DialogTitle>
+            <DialogDescription>Information about the selected ride</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedRide ? (
+              <div>
+                <div className="flex justify-between">
+                  <div className="font-medium">Rider</div>
+                  <div>{selectedRide.riderName}</div>
+                </div>
+                <div className="flex justify-between">
+                  <div className="font-medium">Pickup</div>
+                  <div className="text-right">{selectedRide.pickup}</div>
+                </div>
+                <div className="flex justify-between">
+                  <div className="font-medium">Destination</div>
+                  <div className="text-right">{selectedRide.destination}</div>
+                </div>
+                <div className="flex justify-between">
+                  <div className="font-medium">Fare</div>
+                  <div>${selectedRide.fare.toFixed(2)}</div>
+                </div>
+                <div className="flex justify-between">
+                  <div className="font-medium">Status</div>
+                  <div className={getStatusColor(selectedRide.status)}>{selectedRide.status}</div>
+                </div>
+                <div className="flex justify-between">
+                  <div className="font-medium">Distance</div>
+                  <div>{selectedRide.distance} km</div>
+                </div>
+                <div className="flex justify-between">
+                  <div className="font-medium">Duration</div>
+                  <div>{selectedRide.duration ? `${selectedRide.duration} min` : 'TBD'}</div>
+                </div>
+                <div className="flex justify-between">
+                  <div className="font-medium">Requested</div>
+                  <div>{formatDate(selectedRide.createdAt)} {formatTime(selectedRide.createdAt)}</div>
+                </div>
+              </div>
+            ) : (
+              <div>No ride selected</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

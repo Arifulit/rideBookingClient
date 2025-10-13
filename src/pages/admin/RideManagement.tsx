@@ -84,12 +84,12 @@ const RideManagement = () => {
   ];
 
   const filteredRides = rides.filter(ride => {
+    const q = searchTerm.toLowerCase();
     const matchesSearch = 
-      ride.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ride.riderName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ride.driverName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ride.pickup.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ride.destination.toLowerCase().includes(searchTerm.toLowerCase());
+      ride.riderName.toLowerCase().includes(q) ||
+      (ride.driverName?.toLowerCase() ?? '').includes(q) ||
+      ride.pickup.toLowerCase().includes(q) ||
+      ride.destination.toLowerCase().includes(q);
     const matchesStatus = selectedStatus === 'all' || ride.status === selectedStatus;
     return matchesSearch && matchesStatus;
   });
@@ -217,7 +217,6 @@ const RideManagement = () => {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Ride ID</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Rider</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Driver</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Route</th>
@@ -230,11 +229,9 @@ const RideManagement = () => {
               <tbody>
                 {filteredRides.map((ride) => (
                   <tr key={ride.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-4 px-4 font-medium">{ride.id}</td>
                     <td className="py-4 px-4">
                       <div>
                         <div className="font-medium">{ride.riderName}</div>
-                        <div className="text-sm text-gray-500">ID: {ride.riderId}</div>
                       </div>
                     </td>
                     <td className="py-4 px-4">

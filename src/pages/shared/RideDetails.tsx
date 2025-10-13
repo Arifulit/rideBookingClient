@@ -62,7 +62,7 @@ const RideDetails = () => {
           <CardContent>
             <p className="text-sm text-gray-600">Could not fetch ride details. Check your network or authentication.</p>
             {error && (
-              <p className="text-xs text-red-500 mt-2">{extractErrorMessage(error)}</p>
+              <p className="text-xs text-red-500 mt-2">{String(extractErrorMessage(error))}</p>
             )}
             <div className="mt-4">
               <Button variant="ghost" onClick={() => refetch()}>Retry</Button>
@@ -82,7 +82,7 @@ const RideDetails = () => {
             <CardDescription>The ride could not be found. It may have been removed.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-600">Try a different Ride ID or check with support.</p>
+            <p className="text-sm text-gray-600">Try a different ride reference or check with support.</p>
             <div className="mt-4">
               <Button variant="ghost" onClick={() => refetch()}>Retry</Button>
             </div>
@@ -111,9 +111,11 @@ const RideDetails = () => {
     }
   };
 
-  const formatDuration = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+  // Accept number|string|undefined and coerce safely to number for arithmetic
+  const formatDuration = (minutes?: number | string) => {
+    const minsNum = typeof minutes === 'number' ? minutes : (Number(minutes) || 0);
+    const hours = Math.floor(minsNum / 60);
+    const mins = Math.floor(minsNum % 60);
     if (hours > 0) {
       return `${hours}h ${mins}m`;
     }
@@ -154,19 +156,19 @@ const RideDetails = () => {
 
       {/* Ride Status and Overview */}
       <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle>Ride #{rideData.id}</CardTitle>
-              <CardDescription>
-                {new Date(rideData.createdAt).toLocaleDateString()} at {new Date(rideData.createdAt).toLocaleTimeString()}
-              </CardDescription>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Ride Details</CardTitle>
+                <CardDescription>
+                  {new Date(rideData.createdAt).toLocaleDateString()} at {new Date(rideData.createdAt).toLocaleTimeString()}
+                </CardDescription>
+              </div>
+              <Badge className={getStatusColor(rideData.status)}>
+                {rideData.status.toUpperCase()}
+              </Badge>
             </div>
-            <Badge className={getStatusColor(rideData.status)}>
-              {rideData.status.toUpperCase()}
-            </Badge>
-          </div>
-        </CardHeader>
+          </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="text-center">
@@ -174,7 +176,7 @@ const RideDetails = () => {
                 <Route className="h-5 w-5 text-blue-500" />
               </div>
               <p className="text-sm text-gray-500">Distance</p>
-              <p className="text-xl font-semibold">{rideData.route.distance} km</p>
+              <p className="text-xl font-semibold">{typeof rideData.route?.distance === 'number' ? `${rideData.route.distance}` : `${Number(rideData.route?.distance ?? 0)}`} km</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center mb-2">
@@ -188,7 +190,7 @@ const RideDetails = () => {
                 <DollarSign className="h-5 w-5 text-purple-500" />
               </div>
               <p className="text-sm text-gray-500">Total Fare</p>
-              <p className="text-xl font-semibold">${rideData.payment.total}</p>
+              <p className="text-xl font-semibold">${Number(rideData.payment.total ?? 0).toFixed(2)}</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center mb-2">
@@ -364,39 +366,39 @@ const RideDetails = () => {
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <span>Base Fare</span>
-              <span>${rideData.payment.baseFare.toFixed(2)}</span>
+              <span>${Number(rideData.payment.baseFare ?? 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span>Distance Fare ({rideData.route.distance} km)</span>
-              <span>${rideData.payment.distanceFare.toFixed(2)}</span>
+              <span>${Number(rideData.payment.distanceFare ?? 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span>Time Fare ({formatDuration(rideData.route.duration)})</span>
-              <span>${rideData.payment.timeFare.toFixed(2)}</span>
+              <span>${Number(rideData.payment.timeFare ?? 0).toFixed(2)}</span>
             </div>
             {rideData.payment.surge > 0 && (
               <div className="flex justify-between items-center">
                 <span>Surge Pricing</span>
-                <span>${rideData.payment.surge.toFixed(2)}</span>
+                <span>${Number(rideData.payment.surge ?? 0).toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between items-center">
               <span>Tip</span>
-              <span>${rideData.payment.tip.toFixed(2)}</span>
+              <span>${Number(rideData.payment.tip ?? 0).toFixed(2)}</span>
             </div>
             <hr />
             <div className="flex justify-between items-center">
               <span>Subtotal</span>
-              <span>${rideData.payment.subtotal.toFixed(2)}</span>
+              <span>${Number(rideData.payment.subtotal ?? 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span>Tax</span>
-              <span>${rideData.payment.tax.toFixed(2)}</span>
+              <span>${Number(rideData.payment.tax ?? 0).toFixed(2)}</span>
             </div>
             <hr />
             <div className="flex justify-between items-center font-semibold text-lg">
               <span>Total</span>
-              <span>${rideData.payment.total.toFixed(2)}</span>
+              <span>${Number(rideData.payment.total ?? 0).toFixed(2)}</span>
             </div>
             <div className="flex items-center mt-4 p-3 bg-gray-50 rounded-lg">
               {React.createElement(getPaymentMethodIcon(rideData.payment.method), { className: "h-5 w-5 mr-2 text-gray-600" })}

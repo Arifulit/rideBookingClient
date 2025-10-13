@@ -290,7 +290,8 @@ export const driverApi = baseApi.injectEndpoints({
     // Accept ride request (global ride router)
     acceptRideRequest: builder.mutation<ActiveRide, string>({
       query: (rideId) => ({
-        url: `/ride/${rideId}/accept`,
+        // backend uses plural 'rides' (e.g. /api/v1/rides/:id/accept)
+        url: `/rides/${rideId}/accept`,
         method: 'PATCH',
       }),
       invalidatesTags: ['IncomingRequests', 'ActiveRide'],
@@ -299,7 +300,8 @@ export const driverApi = baseApi.injectEndpoints({
     // Reject ride request (global ride router)
     rejectRideRequest: builder.mutation<{ message: string; success: boolean }, string>({
       query: (rideId) => ({
-        url: `/ride/${rideId}/reject`,
+        // backend uses plural 'rides'
+        url: `/rides/${rideId}/reject`,
         method: 'PATCH',
       }),
       invalidatesTags: ['IncomingRequests'],
@@ -324,11 +326,82 @@ export const driverApi = baseApi.injectEndpoints({
       endLocation?: { latitude: number; longitude: number };
       location?: { latitude: number; longitude: number };
     }>({
-      query: ({ rideId, status, notes, finalFare, endLocation, location }) => ({
-        url: `/ride/${rideId}/status`,
-        method: 'PATCH',
-        body: { status, notes, finalFare, endLocation, location },
-      }),
+      query: ({ rideId, status, notes, finalFare, endLocation, location }) => {
+        // The backend validates enum values in snake_case (e.g. 'driver_arrived', 'in_progress').
+        // Convert frontend hyphenated/status values to snake_case before sending.
+        const toSnake = (s?: string) => (s ? s.replace(/-/g, '_') : s);
+        const payload = {
+          status: toSnake(status as string),
+          notes,
+          finalFare,
+          endLocation,
+          location,
+        } as Record<string, unknown>;
+
+        return {
+          // backend uses plural 'rides'
+          url: `/rides/${rideId}/status`,
+          method: 'PATCH',
+          data: payload,
+        };
+      },
+      // Optimistic update so UI shows new status immediately
+      async onQueryStarted({ rideId, status }, { dispatch, queryFulfilled }) {
+        const toSnake = (s?: string) => (s ? s.replace(/-/g, '_') : s);
+        const newStatus = toSnake(status as string) as ActiveRide['status'];
+
+        // Patch getActiveRide (no args)
+        const patchActive = dispatch(
+          driverApi.util.updateQueryData('getActiveRide', undefined, (draft?: ActiveRide | null) => {
+            try {
+              if (!draft) return;
+              const d = draft as ActiveRide;
+              if (String(d.id) === String(rideId)) {
+                // mutating immer draft; mark as ActiveRide
+                (d as ActiveRide).status = newStatus;
+              }
+            } catch {
+              // ignore
+            }
+          })
+        );
+
+        // Patch getRideRequests (common call uses { showAll: true })
+        let patchRequests: { undo: () => void } | null = null;
+        try {
+          patchRequests = dispatch(
+            driverApi.util.updateQueryData('getRideRequests', { showAll: true }, (draft: unknown) => {
+              if (!draft) return;
+              // draft could be array or object – handle common shapes
+              let list: Array<Record<string, unknown>> | null = null;
+              if (Array.isArray(draft)) {
+                list = draft as unknown as Array<Record<string, unknown>>;
+              } else if (typeof draft === 'object' && draft !== null) {
+                const obj = draft as Record<string, unknown>;
+                if (Array.isArray(obj.data)) list = obj.data as unknown as Array<Record<string, unknown>>;
+                else if (Array.isArray(obj.requests)) list = obj.requests as unknown as Array<Record<string, unknown>>;
+              }
+              if (!list) return;
+              for (const item of list) {
+                const id = String(item['id'] ?? item['_id'] ?? '');
+                if (id === String(rideId)) {
+                  item['status'] = newStatus as unknown as string;
+                }
+              }
+            })
+          );
+        } catch {
+          patchRequests = null;
+        }
+
+        try {
+          await queryFulfilled;
+        } catch {
+          // rollback
+          try { patchActive.undo(); } catch { /* ignore */ }
+          try { patchRequests?.undo(); } catch { /* ignore */ }
+        }
+      },
       invalidatesTags: ['ActiveRide', 'RideHistory', 'Earnings'],
     }),
 
@@ -339,11 +412,42 @@ export const driverApi = baseApi.injectEndpoints({
       actualDistance?: number;
       actualDuration?: number;
     }>({
-      query: (completeData) => ({
-        url: `/ride/${completeData.rideId}/complete`,
-        method: 'POST',
-        body: completeData,
-      }),
+      query: (completeData) => {
+        // Ensure any status-like fields are snake_cased if present by backend expectations.
+        const normalizeComplete = { ...completeData } as Record<string, unknown>;
+        if (normalizeComplete.status && typeof normalizeComplete.status === 'string') {
+          normalizeComplete.status = (normalizeComplete.status as string).replace(/-/g, '_');
+        }
+
+        return {
+          // backend uses plural 'rides'
+          url: `/rides/${completeData.rideId}/complete`,
+          method: 'POST',
+          data: normalizeComplete,
+        };
+      },
+      // Optimistic update for completing a ride: mark active ride status as completed immediately
+      async onQueryStarted({ rideId }, { dispatch, queryFulfilled }) {
+        const patchActive = dispatch(
+          driverApi.util.updateQueryData('getActiveRide', undefined, (draft?: ActiveRide | null) => {
+            try {
+              if (!draft) return;
+              const d = draft as ActiveRide;
+              if (String(d.id) === String(rideId)) {
+                (d as ActiveRide).status = 'completed';
+              }
+            } catch {
+              // ignore
+            }
+          })
+        );
+
+        try {
+          await queryFulfilled;
+        } catch {
+          try { patchActive.undo(); } catch { /* ignore */ }
+        }
+      },
       invalidatesTags: ['ActiveRide', 'RideHistory'],
     }),
 
@@ -389,7 +493,7 @@ export const driverApi = baseApi.injectEndpoints({
         return {
           url: '/driver/documents',
           method: 'PUT',
-          body: formData,
+          data: formData,
         };
       },
       invalidatesTags: ['DriverProfile'],

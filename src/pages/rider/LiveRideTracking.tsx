@@ -167,7 +167,7 @@ export function LiveRideTracking({ className = '' }: LiveRideTrackingProps) {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Live Tracking</h1>
-            <p className="text-muted-foreground">Ride ID: {rideId}</p>
+            <p className="text-muted-foreground">Live ride information</p>
           </div>
         </div>
 
