@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { 
@@ -18,12 +18,22 @@ import {
   Zap,
   ArrowRight
 } from 'lucide-react';
-import { useCreateRideMutation } from '@/redux/features/ride/ride.api';
+import { useCreateRideRequestMutation, useGetFareEstimationMutation } from '@/redux/features/rider/riderApi';
+import type { Location } from '@/types/rider';
+import LocationSearch from './components/LocationSearch';
 import { toast } from 'sonner';
 
 const bookRideSchema = z.object({
-  pickupAddress: z.string().min(1, 'Pickup location is required'),
-  destinationAddress: z.string().min(1, 'Destination is required'),
+  pickupLocation: z.object({
+    address: z.string().min(1, 'Pickup location is required'),
+    latitude: z.number(),
+    longitude: z.number(),
+  }),
+  destinationLocation: z.object({
+    address: z.string().min(1, 'Destination is required'),
+    latitude: z.number(),
+    longitude: z.number(),
+  }),
   paymentMethod: z.enum(['cash', 'card', 'wallet'], {
     error: 'Please select a payment method',
   }),
@@ -33,47 +43,79 @@ type BookRideFormData = z.infer<typeof bookRideSchema>;
 
 const BookRide = () => {
   const [estimatedFare, setEstimatedFare] = useState<number | null>(null);
-  const [createRide, { isLoading }] = useCreateRideMutation();
+  const [createRideRequest, { isLoading }] = useCreateRideRequestMutation();
+  const [getFareEstimation] = useGetFareEstimationMutation();
   const navigate = useNavigate();
 
   const {
-    register,
+    control,
     handleSubmit,
     setValue,
     watch,
     formState: { errors },
   } = useForm<BookRideFormData>({
     resolver: zodResolver(bookRideSchema),
+    defaultValues: {
+      paymentMethod: 'cash',
+    } as Partial<BookRideFormData>,
   });
 
-  const pickupAddress = watch('pickupAddress');
-  const destinationAddress = watch('destinationAddress');
+  const pickupLocation = watch('pickupLocation') as Location | undefined;
+  const destinationLocation = watch('destinationLocation') as Location | undefined;
 
-  // Mock fare calculation based on distance
-  React.useEffect(() => {
-    if (pickupAddress && destinationAddress) {
-      // Simulate fare calculation (in real app, this would use a mapping service)
-      const mockDistance = Math.random() * 20 + 2; // 2-22 km
-      const baseFare = 3.5;
-      const perKm = 1.2;
-      const calculated = baseFare + (mockDistance * perKm);
-      setEstimatedFare(Math.round(calculated * 100) / 100);
-    } else {
-      setEstimatedFare(null);
-    }
-  }, [pickupAddress, destinationAddress]);
+  // Fetch fare estimation from backend when both locations are present
+  useEffect(() => {
+    let mounted = true;
+    const runEstimation = async () => {
+      if (!pickupLocation || !destinationLocation) {
+        setEstimatedFare(null);
+        return;
+      }
+      try {
+        const res = await getFareEstimation({
+          pickupLocation: { latitude: pickupLocation.latitude, longitude: pickupLocation.longitude, address: pickupLocation.address },
+          dropoffLocation: { latitude: destinationLocation.latitude, longitude: destinationLocation.longitude, address: destinationLocation.address },
+          vehicleType: 'economy',
+        }).unwrap();
+        if (mounted && res && typeof res.total === 'number') setEstimatedFare(res.total);
+      } catch {
+        // ignore estimation errors
+        if (mounted) setEstimatedFare(null);
+      }
+    };
+    runEstimation();
+    return () => { mounted = false; };
+  }, [pickupLocation, destinationLocation, getFareEstimation]);
 
   const onSubmit = async (data: BookRideFormData) => {
     try {
       // In a real app, you'd geocode the addresses to get coordinates
-      const rideRequest = {
-        pickup: data.pickupAddress,
-        destination: data.destinationAddress,
-        fare: estimatedFare || 0,
-        paymentMethod: data.paymentMethod,
-      };
+      // Build payload using the RideRequest shape: use location objects selected by the user
+      if (!data.pickupLocation || !data.destinationLocation) {
+        toast.error('Please select both pickup and destination locations');
+        return;
+      }
 
-      const response = await createRide(rideRequest).unwrap();
+      const toPoint = (loc: Location) => ({
+        type: 'Point',
+        coordinates: [loc.longitude, loc.latitude],
+      });
+
+      const rideRequest = {
+        pickupLocation: {
+          address: data.pickupLocation.address,
+          coordinates: toPoint(data.pickupLocation),
+        },
+        destination: {
+          address: data.destinationLocation.address,
+          coordinates: toPoint(data.destinationLocation),
+        },
+        rideType: 'economy',
+        paymentMethod: data.paymentMethod,
+        notes: undefined,
+      } as any;
+
+      const response = await createRideRequest(rideRequest).unwrap();
       // response may be the created ride or wrapped in { data }
       const rideId = response?.id || response?.data?.id || null;
       if (rideId) {
@@ -89,7 +131,9 @@ const BookRide = () => {
       console.error('Book ride error:', error);
       // Try to extract a friendly message from common response shapes
       const serverMessage = error?.data?.message || error?.message || (error?.data && JSON.stringify(error.data)) || null;
-      toast.error(serverMessage || 'Failed to book ride. Please try again.');
+      // Also include status if available
+      const status = error?.status ? ` (${error.status})` : '';
+      toast.error((serverMessage ? `${serverMessage}${status}` : 'Failed to book ride. Please try again.'));
     }
   };
 
@@ -157,15 +201,22 @@ const BookRide = () => {
                     <span>Pickup Location</span>
                   </label>
                   <div className="relative">
-                    <input
-                      {...register('pickupAddress')}
-                      placeholder="Enter pickup location"
-                      className={`w-full px-6 py-4 bg-white/70 backdrop-blur-sm border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-green-500/20 transition-all duration-300 pl-14 text-lg ${
-                        errors.pickupAddress
-                          ? 'border-red-300 focus:border-red-500'
-                          : 'border-gray-200 focus:border-green-500'
-                      }`}
+                    <Controller
+                      name="pickupLocation"
+                      control={control}
+                      render={({ field }) => (
+                        <LocationSearch
+                          value={field.value}
+                          onChange={(loc: Location) => {
+                            field.onChange(loc);
+                            setValue('pickupLocation', loc);
+                          }}
+                          placeholder="Enter pickup location"
+                          className="w-full"
+                        />
+                      )}
                     />
+                    
                     <MapPin className="absolute left-5 top-1/2 transform -translate-y-1/2 h-6 w-6 text-green-600" />
                   </div>
                   {errors.pickupAddress && (
@@ -183,15 +234,22 @@ const BookRide = () => {
                     <span>Destination</span>
                   </label>
                   <div className="relative">
-                    <input
-                      {...register('destinationAddress')}
-                      placeholder="Where to?"
-                      className={`w-full px-6 py-4 bg-white/70 backdrop-blur-sm border-2 rounded-2xl focus:outline-none focus:ring-4 focus:ring-red-500/20 transition-all duration-300 pl-14 text-lg ${
-                        errors.destinationAddress
-                          ? 'border-red-300 focus:border-red-500'
-                          : 'border-gray-200 focus:border-red-500'
-                      }`}
+                    <Controller
+                      name="destinationLocation"
+                      control={control}
+                      render={({ field }) => (
+                        <LocationSearch
+                          value={field.value}
+                          onChange={(loc: Location) => {
+                            field.onChange(loc);
+                            setValue('destinationLocation', loc);
+                          }}
+                          placeholder="Where to?"
+                          className="w-full"
+                        />
+                      )}
                     />
+                    
                     <MapPin className="absolute left-5 top-1/2 transform -translate-y-1/2 h-6 w-6 text-red-600" />
                   </div>
                   {errors.destinationAddress && (

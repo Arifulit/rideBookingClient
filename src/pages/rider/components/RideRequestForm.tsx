@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge';
 
 import { 
   useCreateRideRequestMutation,
-  useLazyGetFareEstimationQuery,
+  useGetFareEstimationMutation,
   useLazyGetCurrentLocationQuery
 } from '@/redux/features/rider/riderApi';
 
@@ -99,7 +99,8 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
   const dispatch = useDispatch();
   const riderState = useSelector((state: RootState) => state.rider);
   
-  const [getFareEstimation, { data: fareEstimations, isLoading: fareLoading }] = useLazyGetFareEstimationQuery();
+  // use mutation to request a single fare estimation from server
+  const [getFareEstimation, { data: fareEstimation, isLoading: fareLoading }] = useGetFareEstimationMutation();
   const [, { isLoading: locationLoading }] = useLazyGetCurrentLocationQuery();
   const [createRideRequest, { isLoading: requestLoading }] = useCreateRideRequestMutation();
   // const { data: paymentMethods } = useGetPaymentMethodsQuery();
@@ -121,15 +122,23 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
   const destinationLocation = watch('destinationLocation');
   const currentRideType = watch('rideType');
 
-  // Get fare estimation when locations change
+  // Get fare estimation when locations or ride type change
   useEffect(() => {
     if (pickupLocation && destinationLocation) {
-      getFareEstimation({
-        pickup: pickupLocation,
-        destination: destinationLocation,
-      });
+      // call mutation to get fare estimation; use the API's expected keys
+      (async () => {
+        try {
+          await getFareEstimation({
+            pickupLocation,
+            dropoffLocation: destinationLocation,
+            vehicleType: selectedRideType,
+          }).unwrap();
+        } catch {
+          // ignore estimation errors; UI will show nothing
+        }
+      })();
     }
-  }, [pickupLocation, destinationLocation, getFareEstimation]);
+  }, [pickupLocation, destinationLocation, getFareEstimation, selectedRideType]);
 
   // Sync with Redux state
   useEffect(() => {
@@ -200,6 +209,9 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
         paymentMethod: data.paymentMethod,
         passengers: data.passengers,
         notes: data.notes || '',
+        estimatedFare: currentFareEstimation?.total,
+        estimatedDistance: currentFareEstimation?.distance,
+        estimatedDuration: currentFareEstimation?.duration,
       };
 
       const result = await createRideRequest(rideRequest).unwrap();
@@ -216,9 +228,7 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
     }
   };
 
-  const currentFareEstimation = fareEstimations?.find(
-    (estimation) => estimation.rideType === currentRideType
-  );
+  const currentFareEstimation = fareEstimation && fareEstimation.rideType === currentRideType ? fareEstimation : undefined;
 
   return (
     <motion.div 

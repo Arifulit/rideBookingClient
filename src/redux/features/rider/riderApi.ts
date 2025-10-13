@@ -46,17 +46,21 @@ export const riderApi = createApi({
     'Profile'
   ],
   endpoints: (builder) => ({
-    // Location Services
-    searchLocations: builder.query<Location[], { query: string }>({
-      query: ({ query }) => ({
-        url: '/rider/locations/search',
-        method: 'GET',
-        params: { q: query }
-      }),
+    // Location Services - legacy alias kept for compatibility
+    searchLocations: builder.query<Location[], { query: string } | string>({
+      // Accept either a plain string or an object { query }
+      query: (arg) => {
+        const q = typeof arg === 'string' ? arg : (arg?.query ?? '');
+        return {
+          url: '/places/search',
+          method: 'GET',
+          params: { q },
+        };
+      },
       providesTags: ['Location'],
     }),
     // Ride Request
-    createRideRequest: builder.mutation<Ride, RideRequest>({
+   createRideRequest: builder.mutation<Ride, RideRequest>({
       query: (rideData) => ({
         url: '/rides/request',
         method: 'POST',

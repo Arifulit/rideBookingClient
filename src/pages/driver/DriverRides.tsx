@@ -60,6 +60,7 @@ interface Ride {
   destination: string;
   fare: number;
   status:
+  | 'requested'
   | 'accepted'
   | 'rejected'
   | 'picked_up'
@@ -90,7 +91,16 @@ const DriverRides = (): JSX.Element => {
     isError: requestsError,
     error: requestsErrorObj,
     refetch: refetchRequests,
-  } = useGetRideRequestsQuery({ showAll: true } as { showAll?: boolean });
+  } = useGetRideRequestsQuery(
+    { showAll: true } as { showAll?: boolean },
+    {
+      // Poll for new requests every 5 seconds so drivers see incoming ride requests quickly
+      pollingInterval: 5000,
+      // Helpful for mobile/desktop re-focus or network reconnects
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    }
+  );
 
   const [updateRideStatus, { isLoading: updatingStatus }] = useUpdateRideStatusMutation();
   const [completeRide, { isLoading: completingRide }] = useCompleteRideMutation();
@@ -248,11 +258,12 @@ const DriverRides = (): JSX.Element => {
 
       if (items.length > 0) {
         const mapStatus = (s?: string) => {
-          if (!s) return 'accepted';
+          // requests from rider without explicit status should be 'requested'
+          if (!s) return 'requested';
           const raw = String(s);
           // normalize snake_case -> hyphen for UI friendliness, map known aliases
           const snake = raw.replace(/-/g, '_');
-          if (snake === 'requested') return 'accepted';
+          if (snake === 'requested') return 'requested';
           if (snake === 'rejected') return 'rejected';
           // keep original form (some backends return snake_case, some hyphenated)
           return raw as Ride['status'];
@@ -371,6 +382,7 @@ const DriverRides = (): JSX.Element => {
 
   // Full allowed statuses (UI uses hyphenated forms to match Ride type); driverApi will normalize to snake_case before sending.
   const ALL_STATUSES: Ride['status'][] = [
+    'requested',
     'accepted',
     'rejected',
     'picked_up',
@@ -396,6 +408,7 @@ const DriverRides = (): JSX.Element => {
     switch (status) {
       case 'completed': return 'bg-green-100 text-green-800';
       case 'in_transit': return 'bg-blue-100 text-blue-800';
+      case 'requested': return 'bg-indigo-100 text-indigo-800';
       case 'driver-arriving': return 'bg-yellow-100 text-yellow-800';
       case 'driver-arrived': return 'bg-yellow-100 text-yellow-800';
       case 'picked_up': return 'bg-purple-100 text-purple-800';
@@ -420,6 +433,11 @@ const DriverRides = (): JSX.Element => {
     active: rides.filter(r => ['accepted', 'picked_up', 'in_transit'].includes(r.status)).length,
     cancelled: rides.filter(r => r.status === 'cancelled').length,
     totalEarned: rides.filter(r => r.status === 'completed').reduce((sum, r) => sum + (r.fare || 0), 0),
+    // exclude cancelled rides from total fares
+    totalFare: rides.reduce((sum, r) => {
+      if (r.status === 'cancelled') return sum;
+      return sum + (Number.isFinite(Number(r.fare)) ? Number(r.fare) : 0);
+    }, 0),
   }), [rides]);
 
   const formatDate = (iso?: string) => iso ? new Date(iso).toLocaleDateString() : '-';
@@ -495,15 +513,18 @@ const DriverRides = (): JSX.Element => {
 
         <Card>
           <CardHeader className="flex items-center justify-between pb-2">
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-purple-600" />
-              <CardTitle className="text-sm font-medium">Earnings</CardTitle>
-            </div>
-            <CardTitle className="text-sm font-medium">${statsData.totalEarned.toFixed(2)}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xs text-muted-foreground">From completed rides</div>
-          </CardContent>
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-purple-600" />
+                <CardTitle className="text-sm font-medium">Earnings</CardTitle>
+              </div>
+              <div className="text-right">
+                <CardTitle className="text-sm font-medium">${statsData.totalFare.toFixed(2)}</CardTitle>
+                <div className="text-xs text-muted-foreground">Total fares (all rides)</div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-xs text-muted-foreground">Completed earnings: ${statsData.totalEarned.toFixed(2)}</div>
+            </CardContent>
         </Card>
       </div>
 
@@ -743,6 +764,46 @@ const DriverRides = (): JSX.Element => {
                             </>}
                             <DropdownMenuSeparator />
                             <DropdownMenuLabel>All statuses</DropdownMenuLabel>
+                            {/* If this is a request, allow Accept/Reject here too */}
+                            {ride.status === 'requested' && (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={async () => {
+                                    if (updatingStatus) return;
+                                    try {
+                                      await updateRideStatus({ rideId: ride.id, status: 'accepted' as any }).unwrap();
+                                      sonnerToast.success('Ride accepted.');
+                                      refetchRequests();
+                                      refetchActiveRide();
+                                    } catch (err) {
+                                      console.error('accept request failed', err);
+                                      sonnerToast.error('Could not accept request');
+                                    }
+                                  }}
+                                  disabled={updatingStatus}
+                                >
+                                  Accept Request
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={async () => {
+                                    if (updatingStatus) return;
+                                    try {
+                                      await updateRideStatus({ rideId: ride.id, status: 'rejected' as any }).unwrap();
+                                      sonnerToast.success('Request rejected.');
+                                      refetchRequests();
+                                    } catch (err) {
+                                      console.error('reject request failed', err);
+                                      sonnerToast.error('Could not reject request');
+                                    }
+                                  }}
+                                  disabled={updatingStatus}
+                                >
+                                  Reject Request
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>
+                            )}
                             {ALL_STATUSES.map((s) => (
                               <DropdownMenuItem
                                 key={s}

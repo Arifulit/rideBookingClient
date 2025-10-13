@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, MapPin, Clock, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useLazySearchLocationsQuery } from '@/redux/features/rider/riderApi';
+import { useLazySearchPlacesQuery } from '@/redux/features/rider/riderApi';
 import type { Location } from '@/types/rider';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -31,14 +31,15 @@ export function LocationSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   
   const debouncedQuery = useDebounce(query, 300);
-  const [searchLocations, { data: suggestions = [], isLoading }] = useLazySearchLocationsQuery();
+  const [searchPlaces, { data: suggestions = [], isLoading }] = useLazySearchPlacesQuery();
 
   // Search for locations when query changes
   useEffect(() => {
     if (debouncedQuery && debouncedQuery.length >= 2 && isOpen) {
-      searchLocations({ query: debouncedQuery });
+      // searchPlaces expects a plain string (q)
+      searchPlaces(debouncedQuery);
     }
-  }, [debouncedQuery, isOpen, searchLocations]);
+  }, [debouncedQuery, isOpen, searchPlaces]);
 
   // Update input when value changes externally
   useEffect(() => {
