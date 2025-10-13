@@ -24,8 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
-import { 
-  useCreateRideRequestMutation,
+import {
   useGetFareEstimationMutation,
   useLazyGetCurrentLocationQuery
 } from '@/redux/features/rider/riderApi';
@@ -102,7 +101,8 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
   // use mutation to request a single fare estimation from server
   const [getFareEstimation, { data: fareEstimation, isLoading: fareLoading }] = useGetFareEstimationMutation();
   const [, { isLoading: locationLoading }] = useLazyGetCurrentLocationQuery();
-  const [createRideRequest, { isLoading: requestLoading }] = useCreateRideRequestMutation();
+  // we'll POST directly to the backend endpoint and manage local submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // const { data: paymentMethods } = useGetPaymentMethodsQuery();
 
   const [showScheduleTime, setShowScheduleTime] = useState(false);
@@ -199,32 +199,61 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
     dispatch(setRideType(rideType));
   };
 
-  const onSubmit = async (data: RideRequestFormData) => {
-    try {
-      const rideRequest = {
-        pickupLocation: data.pickupLocation,
-        destinationLocation: data.destinationLocation,
-        rideType: data.rideType,
-        scheduledTime: data.scheduledTime,
-        paymentMethod: data.paymentMethod,
-        passengers: data.passengers,
-        notes: data.notes || '',
-        estimatedFare: currentFareEstimation?.total,
-        estimatedDistance: currentFareEstimation?.distance,
-        estimatedDuration: currentFareEstimation?.duration,
-      };
+  const formatLocationToGeo = (loc: { address: string; latitude?: number; longitude?: number } | undefined) => {
+    if (!loc) return null;
+    return {
+      address: loc.address || 'Unknown',
+      coordinates: {
+        type: 'Point',
+        // GeoJSON uses [longitude, latitude]
+        coordinates: [loc.longitude ?? 0, loc.latitude ?? 0],
+      },
+    };
+  };
 
-      const result = await createRideRequest(rideRequest).unwrap();
-      
+  const onSubmit = async (data: RideRequestFormData) => {
+    if (!data.pickupLocation || !data.destinationLocation) {
+      toast.error('Please provide pickup and destination locations');
+      return;
+    }
+
+    const payload = {
+      pickupLocation: formatLocationToGeo(data.pickupLocation),
+      destination: formatLocationToGeo(data.destinationLocation),
+      rideType: data.rideType,
+      paymentMethod: data.paymentMethod,
+      passengers: data.passengers,
+      notes: data.notes || '',
+      scheduledTime: data.scheduledTime || null,
+    };
+
+    try {
+      setIsSubmitting(true);
+
+      const res = await fetch('http://localhost:5000/api/v1/rides/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        const message = result?.message || 'Failed to create ride request';
+        toast.error(message);
+        return;
+      }
+
       toast.success('Ride requested successfully!');
-      onSuccess?.(result.id);
-      
-      // Clear form or keep for next request based on UX decision
-      // clearForm();
-      
-    } catch (error: unknown) {
-      const errorMessage = (error as { data?: { message?: string } })?.data?.message || 'Failed to create ride request';
-      toast.error(errorMessage);
+      // backend should return an id or similar
+      onSuccess?.(result.id || result._id || '');
+
+    } catch (err) {
+      toast.error('Network error while creating ride request');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -542,9 +571,9 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
             <Button
               type="submit"
               className="btn-primary w-full py-4 text-lg font-semibold"
-              disabled={!isValid || requestLoading || !pickupLocation || !destinationLocation}
+              disabled={!isValid || isSubmitting || !pickupLocation || !destinationLocation}
             >
-              {requestLoading ? (
+              {isSubmitting ? (
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
                   Requesting Ride...

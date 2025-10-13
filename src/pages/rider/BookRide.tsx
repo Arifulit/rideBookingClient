@@ -18,7 +18,7 @@ import {
   Zap,
   ArrowRight
 } from 'lucide-react';
-import { useCreateRideRequestMutation, useGetFareEstimationMutation } from '@/redux/features/rider/riderApi';
+import { useGetFareEstimationMutation } from '@/redux/features/rider/riderApi';
 import type { Location } from '@/types/rider';
 import LocationSearch from './components/LocationSearch';
 import { toast } from 'sonner';
@@ -43,7 +43,7 @@ type BookRideFormData = z.infer<typeof bookRideSchema>;
 
 const BookRide = () => {
   const [estimatedFare, setEstimatedFare] = useState<number | null>(null);
-  const [createRideRequest, { isLoading }] = useCreateRideRequestMutation();
+  const [isLoading, setIsLoading] = useState(false);
   const [getFareEstimation] = useGetFareEstimationMutation();
   const navigate = useNavigate();
 
@@ -88,52 +88,62 @@ const BookRide = () => {
   }, [pickupLocation, destinationLocation, getFareEstimation]);
 
   const onSubmit = async (data: BookRideFormData) => {
+    // In a real app, you'd geocode the addresses to get coordinates
+    // Build payload using the RideRequest shape: use location objects selected by the user
+    if (!data.pickupLocation || !data.destinationLocation) {
+      toast.error('Please select both pickup and destination locations');
+      return;
+    }
+
+    const toPoint = (loc: Location) => ({
+      type: 'Point',
+      coordinates: [loc.longitude, loc.latitude],
+    });
+
+    const rideRequest = {
+      pickupLocation: {
+        address: data.pickupLocation.address,
+        coordinates: toPoint(data.pickupLocation),
+      },
+      destination: {
+        address: data.destinationLocation.address,
+        coordinates: toPoint(data.destinationLocation),
+      },
+      rideType: 'economy',
+      paymentMethod: data.paymentMethod,
+      notes: undefined,
+    } as any;
+
     try {
-      // In a real app, you'd geocode the addresses to get coordinates
-      // Build payload using the RideRequest shape: use location objects selected by the user
-      if (!data.pickupLocation || !data.destinationLocation) {
-        toast.error('Please select both pickup and destination locations');
+      setIsLoading(true);
+
+      const res = await fetch('http://localhost:5000/api/v1/rides/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rideRequest),
+      });
+
+      const response = await res.json();
+      if (!res.ok) {
+        toast.error(response?.message || 'Failed to create ride');
         return;
       }
 
-      const toPoint = (loc: Location) => ({
-        type: 'Point',
-        coordinates: [loc.longitude, loc.latitude],
-      });
-
-      const rideRequest = {
-        pickupLocation: {
-          address: data.pickupLocation.address,
-          coordinates: toPoint(data.pickupLocation),
-        },
-        destination: {
-          address: data.destinationLocation.address,
-          coordinates: toPoint(data.destinationLocation),
-        },
-        rideType: 'economy',
-        paymentMethod: data.paymentMethod,
-        notes: undefined,
-      } as any;
-
-      const response = await createRideRequest(rideRequest).unwrap();
-      // response may be the created ride or wrapped in { data }
-      const rideId = response?.id || response?.data?.id || null;
+      const rideId = response?.id || response?._id || response?.data?.id || null;
       if (rideId) {
         toast.success('Ride requested successfully!');
         navigate(`/rider/rides/${rideId}`);
       } else {
-        console.warn('createRide returned unexpected shape', response);
         toast.success('Ride requested — awaiting confirmation');
-        // Optionally navigate to ride list instead of detail
         navigate('/rider/rides');
       }
     } catch (error: any) {
       console.error('Book ride error:', error);
-      // Try to extract a friendly message from common response shapes
       const serverMessage = error?.data?.message || error?.message || (error?.data && JSON.stringify(error.data)) || null;
-      // Also include status if available
       const status = error?.status ? ` (${error.status})` : '';
       toast.error((serverMessage ? `${serverMessage}${status}` : 'Failed to book ride. Please try again.'));
+    } finally {
+      setIsLoading(false);
     }
   };
 

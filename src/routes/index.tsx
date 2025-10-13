@@ -15,6 +15,7 @@ import About from "@/pages/public/About";
 import Features from "@/pages/public/Features";
 import Contact from "@/pages/public/Contact";
 import FAQ from "@/pages/public/FAQ";
+import RouteError from '@/components/RouteError';
 import { LoginForm } from "@/modules/auth/Login";
 import { RegisterForm } from "@/modules/auth/Register";
 import Verify from "@/pages/public/Verify";
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: App,
+    errorElement: <RouteError />, 
     children: [
       {
         index: true,
@@ -109,6 +111,7 @@ export const router = createBrowserRouter([
   {
     path: "/rider",
     Component: withAuth(DashboardLayout, "rider"),
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <Navigate to="/rider/dashboard" replace /> },
       ...generateRoutes(userSidebarItems),
