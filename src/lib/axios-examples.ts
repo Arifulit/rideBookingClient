@@ -1,9 +1,3 @@
-/**
- * Example usage of the enhanced axios configuration
- * 
- * This file demonstrates how to use the axios instance and API request utilities
- * with proper TypeScript types and error handling.
- */
 
 import axiosInstance, { apiRequest } from './axios';
 import type { ApiResponse, AuthResponse, LoginRequest, User, Ride, PaginatedResponse } from '@/types/api';
@@ -67,19 +61,3 @@ export const cancelableRequest = async (signal?: AbortSignal): Promise<User[]> =
   
   return response.data.data;
 };
-
-// Usage example for cancelable request:
-// const controller = new AbortController();
-// const promise = cancelableRequest(controller.signal);
-// 
-// // Cancel the request after 5 seconds
-// setTimeout(() => controller.abort(), 5000);
-// 
-// try {
-//   const users = await promise;
-//   console.log(users);
-// } catch (error) {
-//   if (error.name === 'AbortError') {
-//     console.log('Request was cancelled');
-//   }
-// }
