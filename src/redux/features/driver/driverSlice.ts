@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { DriverProfile, RideRequest, ActiveRide } from './driverApi';
 
@@ -66,13 +67,13 @@ const driverSlice = createSlice({
   name: 'driver',
   initialState,
   reducers: {
-    setProfile: (state, action: PayloadAction<DriverProfile>) => {
+    setProfile: (state: DriverState, action: PayloadAction<DriverProfile>) => {
       state.profile = action.payload;
       state.isOnline = action.payload.isOnline;
       state.isAvailable = action.payload.isAvailable;
     },
 
-    updateAvailabilityStatus: (state, action: PayloadAction<{ isOnline: boolean; isAvailable?: boolean }>) => {
+    updateAvailabilityStatus: (state: DriverState, action: PayloadAction<{ isOnline: boolean; isAvailable?: boolean }>) => {
       state.isOnline = action.payload.isOnline;
       if (action.payload.isAvailable !== undefined) {
         state.isAvailable = action.payload.isAvailable;
@@ -83,7 +84,7 @@ const driverSlice = createSlice({
       }
     },
 
-    updateCurrentLocation: (state, action: PayloadAction<{ latitude: number; longitude: number; address: string }>) => {
+    updateCurrentLocation: (state: DriverState, action: PayloadAction<{ latitude: number; longitude: number; address: string }>) => {
       state.currentLocation = action.payload;
       if (state.profile) {
         state.profile.currentLocation = {
@@ -93,7 +94,7 @@ const driverSlice = createSlice({
       }
     },
 
-    addIncomingRequest: (state, action: PayloadAction<RideRequest>) => {
+    addIncomingRequest: (state: DriverState, action: PayloadAction<RideRequest>) => {
       // Avoid duplicates
       const exists = state.incomingRequests.some(req => req.id === action.payload.id);
       if (!exists) {
@@ -111,11 +112,11 @@ const driverSlice = createSlice({
       }
     },
 
-    removeIncomingRequest: (state, action: PayloadAction<string>) => {
+    removeIncomingRequest: (state: DriverState, action: PayloadAction<string>) => {
       state.incomingRequests = state.incomingRequests.filter(req => req.id !== action.payload);
     },
 
-    setActiveRide: (state, action: PayloadAction<ActiveRide | null>) => {
+    setActiveRide: (state: DriverState, action: PayloadAction<ActiveRide | null>) => {
       state.activeRide = action.payload;
       if (action.payload) {
         // Remove from incoming requests if it exists
@@ -141,11 +142,11 @@ const driverSlice = createSlice({
       }
     },
 
-    updateRideStatus: (state, action: PayloadAction<{ status: ActiveRide['status']; timestamp?: string }>) => {
+    updateRideStatus: (state: DriverState, action: PayloadAction<{ status: ActiveRide['status']; timestamp?: string }>) => {
       if (state.activeRide) {
         state.activeRide.status = action.payload.status;
         
-        const statusMessages = {
+        const statusMessages: Record<ActiveRide['status'], string> = {
           'accepted': 'Ride accepted',
           'driver-arriving': 'On your way to pickup',
           'driver-arrived': 'Arrived at pickup location',
@@ -159,7 +160,7 @@ const driverSlice = createSlice({
           id: `status_${Date.now()}`,
           type: 'ride_update',
           title: 'Ride Status Updated',
-          message: statusMessages[action.payload.status],
+          message: statusMessages[action.payload.status as ActiveRide['status']],
           timestamp: action.payload.timestamp || new Date().toISOString(),
           read: false,
         });
@@ -175,13 +176,14 @@ const driverSlice = createSlice({
       }
     },
 
-    updateEarnings: (state, action: PayloadAction<{ today?: number; week?: number; month?: number }>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    updateEarnings: (state: { earnings: { today: any; week: any; month: any; }; }, action: PayloadAction<{ today?: number; week?: number; month?: number }>) => {
       if (action.payload.today !== undefined) state.earnings.today = action.payload.today;
       if (action.payload.week !== undefined) state.earnings.week = action.payload.week;
       if (action.payload.month !== undefined) state.earnings.month = action.payload.month;
     },
 
-    addNotification: (state, action: PayloadAction<Omit<DriverState['notifications'][0], 'id' | 'timestamp' | 'read'>>) => {
+    addNotification: (state: { notifications: any[]; }, action: PayloadAction<Omit<DriverState['notifications'][0], 'id' | 'timestamp' | 'read'>>) => {
       state.notifications.unshift({
         ...action.payload,
         id: `notif_${Date.now()}`,
@@ -190,22 +192,22 @@ const driverSlice = createSlice({
       });
     },
 
-    markNotificationAsRead: (state, action: PayloadAction<string>) => {
+    markNotificationAsRead: (state: { notifications: any[]; }, action: PayloadAction<string>) => {
       const notification = state.notifications.find(n => n.id === action.payload);
       if (notification) {
         notification.read = true;
       }
     },
 
-    markAllNotificationsAsRead: (state) => {
+    markAllNotificationsAsRead: (state: { notifications: any[]; }) => {
       state.notifications.forEach(n => n.read = true);
     },
 
-    removeNotification: (state, action: PayloadAction<string>) => {
+    removeNotification: (state: { notifications: any[]; }, action: PayloadAction<string>) => {
       state.notifications = state.notifications.filter(n => n.id !== action.payload);
     },
 
-    updateSettings: (state, action: PayloadAction<Partial<DriverState['settings']>>) => {
+    updateSettings: (state: { settings: any; }, action: PayloadAction<Partial<DriverState['settings']>>) => {
       state.settings = { ...state.settings, ...action.payload };
     },
 

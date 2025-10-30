@@ -1,68 +1,71 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { baseApi } from "@/redux/baseApi";
 
 export const usersApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    // ✅ Get all users (with optional query params)
     getUsers: builder.query({
       query: (params: any) => ({
-        url: '/users',
-        method: 'GET',
+        url: "/users",
+        method: "GET",
         params,
       }),
-      providesTags: ['User'],
+      providesTags: ["User"],
     }),
+
+    // ✅ Update a user's status
     updateUserStatus: builder.mutation({
       query: ({ id, status }) => ({
         url: `/users/${id}/status`,
-        method: 'PATCH',
-        data: { status }, // axios uses data instead of body
+        method: "PATCH",
+        data: { status }, // axios uses 'data' instead of 'body'
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ["User"],
     }),
+
+    // ✅ Update any user profile (admin use)
     updateProfile: builder.mutation({
       query: ({ id, data }) => ({
         url: `/users/${id}`,
-        method: 'PATCH',
-        data, // axios uses data instead of body
+        method: "PATCH",
+        data,
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ["User"],
     }),
-    // Update the currently authenticated user's profile
+
+    // ✅ Update the authenticated user's own profile
     updateMyProfile: builder.mutation({
       query: (data: any) => ({
         url: `/users/profile`,
-        method: 'PATCH',
+        method: "PATCH",
         data,
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ["User"],
     }),
-    // Get currently authenticated user's profile
+
+    // ✅ Get the authenticated user's profile
     getProfile: builder.query({
       query: () => ({
-        url: '/users/profile',
-        method: 'GET',
+        url: "/users/profile",
+        method: "GET",
       }),
       transformResponse: (response: any) => {
-        // Normalize backend shapes: sometimes API returns { success, data: { user } } or returns user directly
+        // Handle different backend response formats
         if (!response) return null;
         if (response.data) return response.data;
         return response;
       },
-      providesTags: ['User'],
+      providesTags: ["User"],
     }),
   }),
   overrideExisting: false,
 });
 
+// ✅ Export all hooks cleanly
 export const {
   useGetUsersQuery,
   useUpdateUserStatusMutation,
   useUpdateProfileMutation,
+  useUpdateMyProfileMutation,
+  useGetProfileQuery,
 } = usersApi;
-
-// Export the profile hook for convenience
-export const { useGetProfileQuery } = usersApi;
-
-// export the new mutation hook
-export const { useUpdateMyProfileMutation } = usersApi;

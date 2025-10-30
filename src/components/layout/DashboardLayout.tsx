@@ -165,7 +165,7 @@ const DashboardLayout = () => {
               </Button>
               
               <div className="flex-1 min-w-0">
-                <h1 className="text-xl font-semibold text-foreground">
+                <h1 className="text-xl font-bold text-foreground">
                   {user?.role === 'admin'
                     ? 'Admin Dashboard'
                     : user?.role === 'driver'

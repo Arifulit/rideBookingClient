@@ -26,6 +26,7 @@ import NotFound from "@/pages/status/NotFound";
 import Home from "@/pages/public/Home";
 import { driverSidebarItems } from "./driverSidebarItems";
 import RiderDetails from '@/pages/driver/RiderDetails';
+import RideDetails from '@/pages/shared/RideDetails';
 
 
 // Router configuration using createBrowserRouter
@@ -114,7 +115,9 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Navigate to="/rider/dashboard" replace /> },
-      ...generateRoutes(userSidebarItems),
+           ...generateRoutes(userSidebarItems),
+      // dynamic ride details route: /rider/rides/:rideId
+      { path: "rides/:rideId", element: <RideDetails /> },
     ],
   },
   // Alternative User Route (redirects to rider)

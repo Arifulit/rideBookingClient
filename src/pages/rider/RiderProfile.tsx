@@ -1,508 +1,395 @@
-import { useEffect, useState } from 'react';
-import { useGetProfileQuery } from '@/redux/features/user/user.api';
-import { useUpdateRiderProfileMutation } from '@/redux/features/rider/riderApi';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Calendar, 
-  Car,
-  Star,
-  DollarSign,
-  CreditCard,
-  Shield,
-  Settings,
-  Save,
-  Edit,
-  Camera,
-  Plus
-} from 'lucide-react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import React, { useState, useEffect } from 'react';
+import { User, Mail, Phone, Calendar, MapPin, DollarSign, Clock, Edit2, Save, X, RefreshCw, AlertTriangle } from 'lucide-react';
+import { useGetProfileQuery, useUpdateMyProfileMutation } from "@/redux/features/user/user.api";
+import { useNavigate } from 'react-router-dom';
 
 const RiderProfile = () => {
+  const navigate = useNavigate();
+  const { data: apiResponse, isLoading, isError, error, refetch } = useGetProfileQuery({});
+  const [updateProfile, { isLoading: isUpdating }] = useUpdateMyProfileMutation();
+
   const [isEditing, setIsEditing] = useState(false);
-  const { data: profileWrapper, isLoading: profileLoading, isError: profileError, refetch } = useGetProfileQuery(undefined);
-  const [updateProfile] = useUpdateRiderProfileMutation();
-
-  const [profileData, setProfileData] = useState(() => ({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-    joinDate: '',
-    emergencyContactName: '',
-    emergencyContactPhone: '',
-    preferredPayment: ''
-  }));
-
-  const [stats] = useState({
-    totalRides: 47,
-    avgRating: 4.9,
-    totalSpent: 1245.75,
-    savedLocations: 3,
-    completedRides: 45,
-    carbonSaved: 125.5 // kg CO2
+  const [editForm, setEditForm] = useState({
+    firstName: '',
+    lastName: '',
+    phone: ''
   });
 
-  const [paymentMethods] = useState([
-    { id: '1', type: 'card', last4: '4242', brand: 'Visa', isDefault: true },
-    { id: '2', type: 'card', last4: '8888', brand: 'Mastercard', isDefault: false },
-    { id: '3', type: 'wallet', name: 'RideWallet', balance: 25.50, isDefault: false }
-  ]);
+  // Extract data from API response
+  const profileData = apiResponse?.rider || null;
+  const stats = apiResponse?.stats || { totalCompletedRides: 0, totalSpent: 0 };
+  const recentRides = apiResponse?.recentRides || [];
 
-  const [savedLocations] = useState([
-    { id: '1', name: 'Home', address: '123 Rider Street, City, State 12345' },
-    { id: '2', name: 'Work', address: '456 Business Ave, Downtown, State 12345' },
-    { id: '3', name: 'Gym', address: '789 Fitness Blvd, Uptown, State 12345' }
-  ]);
+  // Initialize edit form when profile data loads
+  useEffect(() => {
+    if (profileData) {
+      setEditForm({
+        firstName: profileData.firstName || '',
+        lastName: profileData.lastName || '',
+        phone: profileData.phone || ''
+      });
+    }
+  }, [profileData]);
+
+  const handleEditToggle = () => {
+    if (isEditing && profileData) {
+      // Reset form to original values
+      setEditForm({
+        firstName: profileData.firstName || '',
+        lastName: profileData.lastName || '',
+        phone: profileData.phone || ''
+      });
+    }
+    setIsEditing(!isEditing);
+  };
 
   const handleSave = async () => {
     try {
-      console.debug('Submitting profile update', profileData);
-      console.debug('Outgoing PATCH /users/profile payload:', profileData);
-      const res = await updateProfile(profileData).unwrap();
-      console.debug('updateProfile response:', res);
+      await updateProfile(editForm).unwrap();
       setIsEditing(false);
-      console.debug('Profile update successful (client)');
-      await refetch();
+      // Show success message (you can add toast notification here)
+      console.log('Profile updated successfully');
     } catch (err) {
-      console.error('Profile update failed', err);
-      try {
-        console.error('Profile update error (details):', JSON.stringify(err, null, 2));
-      } catch (jsonErr) {
-        console.warn('Failed to stringify profile update error', jsonErr);
-      }
+      console.error('Failed to update profile:', err);
+      // Show error message (you can add toast notification here)
     }
   };
 
-  const handleCancel = () => {
-    setIsEditing(false);
-  };
-
-  const handleInputChange = (field: string, value: string) => {
-    setProfileData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  // initialize local state from fetched profile
-  useEffect(() => {
-    const user = profileWrapper?.user || profileWrapper;
-    if (user) {
-      console.debug('Loaded rider profile from API', user);
-      setProfileData({
-        name: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name || '',
-        email: user.email || '',
-        phone: user.phone || user.phoneNumber || '',
-        address: user.address || '',
-        joinDate: user.createdAt || user.joinDate || '',
-        emergencyContactName: user.emergencyContactName || '',
-        emergencyContactPhone: user.emergencyContactPhone || '',
-        preferredPayment: user.preferredPayment || ''
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
       });
+    } catch {
+      return 'N/A';
     }
-  }, [profileWrapper]);
+  };
 
-  // Debug: log raw query state to help diagnose missing profile data
-  useEffect(() => {
-    console.debug('RiderProfile - query state', {
-      profileWrapper,
-      profileLoading,
-      profileError,
-    });
-  }, [profileWrapper, profileLoading, profileError]);
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      requested: 'bg-yellow-100 text-yellow-800',
+      accepted: 'bg-blue-100 text-blue-800',
+      completed: 'bg-green-100 text-green-800',
+      cancelled: 'bg-red-100 text-red-800',
+      rejected: 'bg-red-100 text-red-800',
+      'in-transit': 'bg-purple-100 text-purple-800'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const handleRideClick = (rideId: string) => {
+    navigate(`/rides/${rideId}`);
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-center space-x-3">
+              <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+              <span className="text-lg text-gray-600">Loading profile...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (isError || !profileData) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center space-x-3 text-red-600 mb-4">
+              <AlertTriangle className="w-6 h-6" />
+              <span className="text-lg font-semibold">Failed to load profile</span>
+            </div>
+            <p className="text-gray-600 mb-4">Unable to fetch profile data. Please try again.</p>
+            <button
+              onClick={() => refetch()}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
-          <p className="text-gray-600">Manage your rider profile and preferences</p>
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
+                {profileData.firstName?.[0] || 'R'}{profileData.lastName?.[0] || 'R'}
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {profileData.fullName || `${profileData.firstName} ${profileData.lastName}`}
+                </h1>
+                <div className="flex items-center space-x-2 mt-1">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    profileData.isActive === 'active' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {profileData.isActive}
+                  </span>
+                  {profileData.emailVerified && (
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Verified
+                    </span>
+                  )}
+                  {profileData.isBlocked && (
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      Blocked
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={handleEditToggle}
+              disabled={isUpdating}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+            >
+              {isEditing ? <X className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+              <span>{isEditing ? 'Cancel' : 'Edit Profile'}</span>
+            </button>
+          </div>
         </div>
-        {!isEditing ? (
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setIsEditing(true)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit Profile
-            </Button>
-            <Button variant="ghost" onClick={() => { refetch(); }}>
-              Refresh
-            </Button>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave}>
-              <Save className="mr-2 h-4 w-4" />
-              Save Changes
-            </Button>
-          </div>
-        )}
-      </div>
 
-  {/* Stats Cards */}
-  {profileLoading && <div>Loading profile...</div>}
-  {profileError && <div className="text-red-600">Failed to load profile. Check console for details.</div>}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Rides</CardTitle>
-            <Car className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalRides}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">My Rating</CardTitle>
-            <Star className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.avgRating}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${stats.totalSpent}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saved Places</CardTitle>
-            <MapPin className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.savedLocations}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <Shield className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.completedRides}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">CO₂ Saved</CardTitle>
-            <User className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.carbonSaved}kg</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Profile Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Profile Information */}
-        <div className="lg:col-span-2">
-          <Tabs defaultValue="personal" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="personal">Personal Info</TabsTrigger>
-              <TabsTrigger value="payment">Payment Methods</TabsTrigger>
-              <TabsTrigger value="locations">Saved Locations</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="personal">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Personal Information</CardTitle>
-                  <CardDescription>
-                    Update your personal details and emergency contact
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Full Name</Label>
-                      <Input
-                        id="name"
-                        value={profileData.name}
-                        onChange={(e) => handleInputChange('name', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email Address</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={profileData.email}
-                        onChange={(e) => handleInputChange('email', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <Input
-                        id="phone"
-                        value={profileData.phone}
-                        onChange={(e) => handleInputChange('phone', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="preferred-payment">Preferred Payment</Label>
-                      <Input
-                        id="preferred-payment"
-                        value={profileData.preferredPayment}
-                        onChange={(e) => handleInputChange('preferredPayment', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Home Address</Label>
-                    <Input
-                      id="address"
-                      value={profileData.address}
-                      onChange={(e) => handleInputChange('address', e.target.value)}
-                      disabled={!isEditing}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Profile Information */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Profile Information</h2>
+            
+            {isEditing ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.firstName}
+                      onChange={(e) => setEditForm({...editForm, firstName: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                  
-                  <Separator />
-                  
                   <div>
-                    <h3 className="text-lg font-medium mb-4">Emergency Contact</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="emergency-name">Contact Name</Label>
-                        <Input
-                          id="emergency-name"
-                          value={profileData.emergencyContactName}
-                          onChange={(e) => handleInputChange('emergencyContactName', e.target.value)}
-                          disabled={!isEditing}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="emergency-phone">Contact Phone</Label>
-                        <Input
-                          id="emergency-phone"
-                          value={profileData.emergencyContactPhone}
-                          onChange={(e) => handleInputChange('emergencyContactPhone', e.target.value)}
-                          disabled={!isEditing}
-                        />
-                      </div>
-                    </div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.lastName}
+                      onChange={(e) => setEditForm({...editForm, lastName: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({...editForm, phone: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <button
+                  onClick={handleSave}
+                  disabled={isUpdating}
+                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                >
+                  {isUpdating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <User className="w-5 h-5 text-gray-500" />
+                  <div>
+                    <p className="text-xs text-gray-500">Full Name</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {profileData.fullName || `${profileData.firstName} ${profileData.lastName}`}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <Mail className="w-5 h-5 text-gray-500" />
+                  <div>
+                    <p className="text-xs text-gray-500">Email</p>
+                    <p className="text-sm font-medium text-gray-900">{profileData.email}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <Phone className="w-5 h-5 text-gray-500" />
+                  <div>
+                    <p className="text-xs text-gray-500">Phone</p>
+                    <p className="text-sm font-medium text-gray-900">{profileData.phone}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <Calendar className="w-5 h-5 text-gray-500" />
+                  <div>
+                    <p className="text-xs text-gray-500">Member Since</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {formatDate(profileData.createdAt)}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <Clock className="w-5 h-5 text-gray-500" />
+                  <div>
+                    <p className="text-xs text-gray-500">Last Login</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {formatDate(profileData.lastLogin)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
-            <TabsContent value="payment">
-              <Card>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle>Payment Methods</CardTitle>
-                      <CardDescription>
-                        Manage your payment methods and wallet
-                      </CardDescription>
+          {/* Stats Card */}
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Ride Statistics</h2>
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <MapPin className="w-5 h-5 text-blue-600" />
+                      <span className="text-sm text-gray-600">Total Rides</span>
                     </div>
-                    <Button size="sm">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Payment
-                    </Button>
+                    <span className="text-2xl font-bold text-blue-600">
+                      {stats.totalCompletedRides}
+                    </span>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {paymentMethods.map((method) => (
-                    <div key={method.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <CreditCard className="h-6 w-6 text-gray-400" />
-                        <div>
-                          <div className="font-medium flex items-center gap-2">
-                            {method.type === 'card' ? (
-                              <>
-                                {method.brand} ****{method.last4}
-                                {method.isDefault && (
-                                  <Badge className="bg-green-100 text-green-800">Default</Badge>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                {method.name}
-                                <Badge className="bg-purple-100 text-purple-800">
-                                  ${method.balance}
-                                </Badge>
-                              </>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {method.type === 'card' ? 'Credit/Debit Card' : 'Digital Wallet'}
-                          </div>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        {method.isDefault ? 'Edit' : 'Set Default'}
-                      </Button>
+                </div>
+                
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <DollarSign className="w-5 h-5 text-green-600" />
+                      <span className="text-sm text-gray-600">Total Spent</span>
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="locations">
-              <Card>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle>Saved Locations</CardTitle>
-                      <CardDescription>
-                        Quick access to your frequently visited places
-                      </CardDescription>
-                    </div>
-                    <Button size="sm">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Location
-                    </Button>
+                    <span className="text-2xl font-bold text-green-600">
+                      ৳{stats.totalSpent}
+                    </span>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {savedLocations.map((location) => (
-                    <div key={location.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <MapPin className="h-6 w-6 text-gray-400" />
-                        <div>
-                          <div className="font-medium">{location.name}</div>
-                          <div className="text-sm text-gray-500">{location.address}</div>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Profile Card */}
-        <div>
-          <Card>
-            <CardHeader className="text-center pb-6">
-              <div className="relative mx-auto">
-                <Avatar className="h-24 w-24 mx-auto">
-                  <AvatarImage src="/api/placeholder/96/96" alt={profileData.name} />
-                  <AvatarFallback className="text-lg">
-                    {profileData.name.split(' ').map(n => n[0]).join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full p-0"
+        {/* Recent Rides */}
+        <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Rides</h2>
+          {recentRides.length > 0 ? (
+            <div className="space-y-4">
+              {recentRides.map((ride: any) => (
+                <div 
+                  key={ride._id || ride.id} 
+                  onClick={() => handleRideClick(ride._id || ride.id)}
+                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition cursor-pointer"
                 >
-                  <Camera className="h-4 w-4" />
-                </Button>
-              </div>
-              <CardTitle className="mt-4">{profileData.name}</CardTitle>
-              <CardDescription>Verified Rider</CardDescription>
-              <div className="flex justify-center items-center gap-1 mt-2">
-                <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                <span className="font-medium">{stats.avgRating}</span>
-                <span className="text-sm text-gray-500">({stats.totalRides} rides)</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-sm">
-                  <Mail className="h-4 w-4 text-gray-400" />
-                  <span>{profileData.email}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  <Phone className="h-4 w-4 text-gray-400" />
-                  <span>{profileData.phone}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  <MapPin className="h-4 w-4 text-gray-400" />
-                  <span>{profileData.address}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  <Calendar className="h-4 w-4 text-gray-400" />
-                  <span>Member since {profileData.joinDate}</span>
-                </div>
-              </div>
-              
-              <Separator />
-              
-              <div className="space-y-2">
-                <Button variant="outline" className="w-full justify-start">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Account Settings
-                </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <Shield className="mr-2 h-4 w-4" />
-                  Privacy & Safety
-                </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  Billing History
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Achievements Card */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle className="text-lg">Achievements</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <Star className="h-4 w-4 text-green-600" />
-                  </div>
-                  <div>
-                    <div className="font-medium text-sm">Frequent Rider</div>
-                    <div className="text-xs text-gray-500">25+ rides completed</div>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ride.status)}`}>
+                          {ride.status}
+                        </span>
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          {ride.rideType}
+                        </span>
+                        {ride.driver && (
+                          <span className="text-xs text-gray-500">
+                            Driver: {ride.driver.fullName}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex items-start space-x-2">
+                          <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                          <div>
+                            <p className="text-xs text-gray-500">Pickup</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {ride.pickupLocation?.address || 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-start space-x-2">
+                          <div className="w-2 h-2 bg-red-500 rounded-full mt-2"></div>
+                          <div>
+                            <p className="text-xs text-gray-500">Destination</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {ride.destination?.address || 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-gray-900">
+                        ৳{ride.fare?.estimated || ride.fare?.actual || 0}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {ride.distance?.estimated || ride.distance?.actual || 0} km
+                      </p>
+                      <p className="text-xs text-gray-400 mt-2">
+                        {formatDate(ride.timeline?.requested || ride.createdAt)}
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                    <Shield className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <div className="font-medium text-sm">Safety First</div>
-                    <div className="text-xs text-gray-500">High safety rating</div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                    <User className="h-4 w-4 text-purple-600" />
-                  </div>
-                  <div>
-                    <div className="font-medium text-sm">Eco Warrior</div>
-                    <div className="text-xs text-gray-500">100kg+ CO₂ saved</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">No rides yet</p>
+              <p className="text-sm text-gray-400 mt-1">Your ride history will appear here</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,17 +1,26 @@
-import { configureStore, Middleware } from '@reduxjs/toolkit';
-import { setupListeners } from '@reduxjs/toolkit/query';
-import { baseApi } from './baseApi';
-import { adminApi } from './features/admin/adminApi';
-import { riderApi } from './features/rider/riderApi';
+import { configureStore, Middleware } from "@reduxjs/toolkit";
+import { setupListeners } from "@reduxjs/toolkit/query";
+import { baseApi } from "./baseApi";
+import { adminApi } from "./features/admin/adminApi";
+import { riderApi } from "./features/rider/riderApi";
 // APIs are injected into baseApi, so no need to import them separately
-import authReducer from './features/auth/authSlice';
-import riderReducer from './features/rider/riderSlice';
-import driverReducer from './features/driver/driverSlice';
-import { persistStore, persistReducer, FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER } from 'redux-persist';
-import storage from 'redux-persist/lib/storage';
+import authReducer from "./features/auth/authSlice";
+import riderReducer from "./features/rider/riderSlice";
+import driverReducer from "./features/driver/driverSlice";
+import {
+  persistStore,
+  persistReducer,
+  FLUSH,
+  REHYDRATE,
+  PAUSE,
+  PERSIST,
+  PURGE,
+  REGISTER,
+} from "redux-persist";
+import storage from "redux-persist/lib/storage";
 
 // Store configuration options
-const isDevelopment = import.meta.env.MODE === 'development';
+const isDevelopment = import.meta.env.MODE === "development";
 
 // Performance monitoring middleware
 const performanceMiddleware: Middleware = () => (next) => (action: unknown) => {
@@ -22,7 +31,9 @@ const performanceMiddleware: Middleware = () => (next) => (action: unknown) => {
     const end = performance.now();
 
     if (end - start > 16) {
-      console.warn(`Slow action detected: ${typedAction.type} took ${end - start}ms`);
+      console.warn(
+        `Slow action detected: ${typedAction.type} took ${end - start}ms`
+      );
     }
 
     return result;
@@ -32,9 +43,9 @@ const performanceMiddleware: Middleware = () => (next) => (action: unknown) => {
 
 // Persistence configuration for auth
 const authPersistConfig = {
-  key: 'auth',
+  key: "auth",
   storage,
-  blacklist: ['isLoading', 'error'], // Don't persist loading states and errors
+  blacklist: ["isLoading", "error"], // Don't persist loading states and errors
 };
 
 const persistedAuthReducer = persistReducer(authPersistConfig, authReducer);
@@ -42,7 +53,7 @@ const persistedAuthReducer = persistReducer(authPersistConfig, authReducer);
 // Enable Redux DevTools Extension
 declare global {
   interface Window {
-    __REDUX_DEVTOOLS_EXTENSION_COMPOSE__?: typeof import('redux').compose;
+    __REDUX_DEVTOOLS_EXTENSION_COMPOSE__?: typeof import("redux").compose;
     __STORE__?: typeof store;
   }
 }
@@ -51,10 +62,10 @@ declare global {
 export const store = configureStore({
   reducer: {
     auth: persistedAuthReducer,
-  rider: riderReducer,
+    rider: riderReducer,
     driver: driverReducer,
     [baseApi.reducerPath]: baseApi.reducer,
-  [riderApi.reducerPath]: riderApi.reducer,
+    [riderApi.reducerPath]: riderApi.reducer,
     [adminApi.reducerPath]: adminApi.reducer,
   },
   middleware: (getDefaultMiddleware) => {
@@ -69,24 +80,40 @@ export const store = configureStore({
           REGISTER,
           // RTK Query actions are handled automatically
         ],
-        ignoredActionPaths: ['payload.timestamp', 'meta.baseQueryMeta', 'meta.arg'],
-        ignoredPaths: ['auth.user.lastLoginAt', 'driver.currentLocation', 'api.queries', 'api.mutations'],
+        ignoredActionPaths: [
+          "payload.timestamp",
+          "meta.baseQueryMeta",
+          "meta.arg",
+        ],
+        ignoredPaths: [
+          "auth.user.lastLoginAt",
+          "driver.currentLocation",
+          "api.queries",
+          "api.mutations",
+        ],
       },
       immutableCheck: {
         warnAfter: 128,
       },
       actionCreatorCheck: true,
     });
-    
-    return defaultMiddleware.concat(baseApi.middleware, riderApi.middleware, adminApi.middleware, performanceMiddleware);
+
+    return defaultMiddleware.concat(
+      baseApi.middleware,
+      riderApi.middleware,
+      adminApi.middleware,
+      performanceMiddleware
+    );
   },
-  devTools: isDevelopment ? {
-    name: 'Ride Booking App',
-    trace: true,
-    traceLimit: 25,
-    maxAge: 50,
-    serialize: true,
-  } : false,
+  devTools: isDevelopment
+    ? {
+        name: "Ride Booking App",
+        trace: true,
+        traceLimit: 25,
+        maxAge: 50,
+        serialize: true,
+      }
+    : false,
 });
 
 // Enable listener behavior for RTK Query
@@ -103,24 +130,32 @@ export type AppDispatch = typeof store.dispatch;
 export const getCurrentState = (): RootState => store.getState();
 
 // Helper function for dispatching actions
-export const dispatchAction = (action: Parameters<AppDispatch>[0]) => store.dispatch(action);
+export const dispatchAction = (action: Parameters<AppDispatch>[0]) =>
+  store.dispatch(action);
 
 // Error handling utility
-export const handleStoreError = (error: Error, logToExternalService?: (err: Error) => void) => {
-  console.error('Redux Store Error:', error);
+export const handleStoreError = (
+  error: Error,
+  logToExternalService?: (err: Error) => void
+) => {
+  console.error("Redux Store Error:", error);
   if (isDevelopment) {
     console.trace(error);
   }
-  if (logToExternalService && typeof logToExternalService === 'function') {
+  if (logToExternalService && typeof logToExternalService === "function") {
     logToExternalService(error);
   }
 };
 
 // Store subscription utility
-export const subscribeToStore = (callback: () => void) => store.subscribe(callback);
+export const subscribeToStore = (callback: () => void) =>
+  store.subscribe(callback);
 
 // Async state waiting utility
-export const waitForState = <T>(selector: (state: RootState) => T, expectedValue: T): Promise<void> => {
+export const waitForState = <T>(
+  selector: (state: RootState) => T,
+  expectedValue: T
+): Promise<void> => {
   return new Promise((resolve) => {
     const unsubscribe = store.subscribe(() => {
       if (selector(store.getState()) === expectedValue) {
@@ -135,7 +170,7 @@ export const waitForState = <T>(selector: (state: RootState) => T, expectedValue
 // export { logout, setLoading };
 
 // Import User type for proper typing
-import { User } from '@/types/auth';
+import { User } from "@/types/auth";
 
 // State selectors - handle PersistPartial properly
 interface AuthStateWithPersist {
@@ -152,35 +187,34 @@ interface AuthStateWithPersist {
 }
 
 export const selectAuth = (state: RootState) => state.auth;
-export const selectUser = (state: RootState): User | null => (state.auth as unknown as AuthStateWithPersist).user || null;
-export const selectIsAuthenticated = (state: RootState): boolean => Boolean((state.auth as unknown as AuthStateWithPersist).isAuthenticated);
-export const selectAuthTokens = (state: RootState) => (state.auth as unknown as AuthStateWithPersist).tokens || null;
-export const selectAuthLoading = (state: RootState): boolean => Boolean((state.auth as unknown as AuthStateWithPersist).isLoading);
+export const selectUser = (state: RootState): User | null =>
+  (state.auth as unknown as AuthStateWithPersist).user || null;
+export const selectIsAuthenticated = (state: RootState): boolean =>
+  Boolean((state.auth as unknown as AuthStateWithPersist).isAuthenticated);
+export const selectAuthTokens = (state: RootState) =>
+  (state.auth as unknown as AuthStateWithPersist).tokens || null;
+export const selectAuthLoading = (state: RootState): boolean =>
+  Boolean((state.auth as unknown as AuthStateWithPersist).isLoading);
 
 // Store reset utility (useful for logout)
 export const resetStore = () => {
-  dispatchAction({ type: 'auth/logout' });
+  dispatchAction({ type: "auth/logout" });
   persistor.purge(); // Clear persisted state on logout
 };
 
 // Store hydration utility
 export const hydrateStore = (preloadedState: Partial<RootState>) => {
-  store.dispatch({ type: 'HYDRATE_STORE', payload: preloadedState });
+  store.dispatch({ type: "HYDRATE_STORE", payload: preloadedState });
   if (isDevelopment) {
-    console.log('Store hydrated with:', preloadedState);
+    console.log("Store hydrated with:", preloadedState);
   }
 };
 
 // Development utilities
 if (isDevelopment) {
   window.__STORE__ = store;
-  console.log('Initial store state:', store.getState());
+  console.log("Initial store state:", store.getState());
 }
 
 // Export the store as default
 export default store;
-
-
-
-
-

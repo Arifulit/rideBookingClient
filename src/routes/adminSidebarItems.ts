@@ -30,12 +30,12 @@ export const adminSidebarItems: ISidebarItem[] = [
     title: "Management",
     items: [
       {
-        title: "Users",
+        title: "Users Management",
         url: "/admin/users",
         component: UserManagement,
       },
       {
-        title: "Rides",
+        title: "Rides Management",
         url: "/admin/rides",
         component: RideManagement,
       },

@@ -1,530 +1,431 @@
-import { useEffect, useState } from 'react';
-import { useGetProfileQuery } from '@/redux/features/user/user.api';
-import { useUpdateDriverProfileMutation } from '@/redux/features/driver/driverApi';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import { Separator } from '@/components/ui/separator';
-import { 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Calendar, 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+// ...existing code...
+/* eslint-disable no-extra-boolean-cast */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+import React, { useEffect, useState } from "react";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Loader2,
   Car,
-  Star,
+  MapPin,
+  User,
+  Phone,
+  Mail,
   DollarSign,
-  Clock,
-  Shield,
-  Settings,
-  Save,
-  Edit,
-  Camera
-} from 'lucide-react';
+  FileText,
+  Star,
+  Edit2,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
+import {
+  useGetDriverProfileQuery,
+  useUpdateDriverOnlineStatusMutation,
+  useUpdateDriverProfileMutation,
+} from "@/redux/features/driver/driverApi";
 
-const DriverProfile = () => {
+export default function DriverProfile(): JSX.Element {
+  const { data, isLoading, isError, error } = useGetDriverProfileQuery(undefined);
+  const [toggleOnline, { isLoading: toggling }] =
+    useUpdateDriverOnlineStatusMutation();
+  const [updateProfile, { isLoading: updatingProfile }] = useUpdateDriverProfileMutation();
+
+  // backend shape may be { success..., data: { driver: {...} } } or driver object directly
+  const raw = data ?? null;
+  const driver = (raw && (raw.data?.driver ?? raw.driver ?? raw)) ?? null;
+
+  // edit state & form
   const [isEditing, setIsEditing] = useState(false);
-  const { data: profileWrapper, isLoading: profileLoading, isError: profileError, refetch } = useGetProfileQuery(undefined);
-  const [updateProfile] = useUpdateDriverProfileMutation();
-
-  const [profileData, setProfileData] = useState(() => ({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-    joinDate: '',
-    licenseNumber: '',
-    licenseExpiry: '',
-    vehicleMake: '',
-    vehicleModel: '',
-    vehicleYear: '',
-    vehiclePlate: '',
-    vehicleColor: ''
-  }));
-
-  const { toast } = useToast();
-
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
+  const [form, setForm] = useState<any>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    vehicleInfo: {},
   });
 
-  const [passwordUpdating, setPasswordUpdating] = useState(false);
+  useEffect(() => {
+    if (!driver) return;
+    const u = driver.userId ?? {
+      firstName: driver.firstName,
+      lastName: driver.lastName,
+      email: driver.email,
+      phone: driver.phone,
+    };
+    setForm({
+      firstName: u.firstName ?? "",
+      lastName: u.lastName ?? "",
+      email: u.email ?? "",
+      phone: u.phone ?? "",
+      vehicleInfo: driver.vehicleInfo ?? driver.vehicle ?? {},
+    });
+  }, [driver]);
 
-  const [stats] = useState({
-    totalRides: 1247,
-    rating: 4.8,
-    totalEarnings: 15420.50,
-    completionRate: 98.5,
-    responseTime: '2.3 min',
-    activeHours: '156 hrs'
-  });
+  if (isLoading)
+    return (
+      <div className="flex items-center justify-center h-screen text-lg font-medium text-gray-700">
+        <Loader2 className="animate-spin mr-2" /> Loading driver profile...
+      </div>
+    );
 
-  const handleSave = async () => {
+  if (isError)
+    return (
+      <div className="flex items-center justify-center h-screen text-red-600 font-semibold">
+        ❌ {(error as any)?.data?.message ?? "Failed to load profile"}
+      </div>
+    );
+
+  if (!driver)
+    return (
+      <div className="flex items-center justify-center h-screen text-gray-600">
+        No driver data available.
+      </div>
+    );
+
+  const u = driver.userId ?? {
+    firstName: driver.firstName,
+    lastName: driver.lastName,
+    email: driver.email,
+    phone: driver.phone,
+    profilePicture: driver.profileImage,
+    fullName: `${driver.firstName ?? ""} ${driver.lastName ?? ""}`.trim(),
+  };
+  const v = driver.vehicleInfo ?? driver.vehicle;
+
+  const handleToggleOnline = async () => {
     try {
-      console.debug('Submitting driver profile update', profileData);
-      await updateProfile(profileData).unwrap();
-      setIsEditing(false);
-      console.debug('Driver profile updated');
-      refetch();
-    } catch (err) {
-      console.error('Driver profile update failed', err);
+      await toggleOnline(!Boolean(driver.isOnline)).unwrap();
+    } catch {
+      // ignore — UI will reflect via RTK cache or show toast elsewhere
     }
   };
 
-  const handleCancel = () => {
+  const handleEditClick = () => setIsEditing(true);
+  const handleCancelEdit = () => {
+    // revert form to current driver values
+    setForm((f: any) => ({
+      ...f,
+      firstName: u.firstName ?? "",
+      lastName: u.lastName ?? "",
+      email: u.email ?? "",
+      phone: u.phone ?? "",
+      vehicleInfo: v ?? {},
+    }));
     setIsEditing(false);
   };
 
-  const handleInputChange = (field: string, value: string) => {
-    setProfileData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  const handleSave = async () => {
+    try {
+      const payload: any = {
+        // backend may accept nested user fields or top-level fields; send the most common fields
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phone: form.phone,
+        vehicleInfo: form.vehicleInfo,
+      };
+      // include id if backend expects it
+      if (driver.id ?? driver._id) payload.id = driver.id ?? driver._id;
+
+      await updateProfile(payload).unwrap();
+      // success: RTK Query invalidation refreshes profile; turn off edit mode
+      setIsEditing(false);
+    } catch (err) {
+      // keep editing, show console error — you may integrate toast here
+      // console.error('updateProfile failed', err);
+    }
   };
 
-  useEffect(() => {
-    const user = profileWrapper?.user || profileWrapper;
-    if (user) {
-      console.debug('Loaded driver profile from API', user);
-      setProfileData({
-        name: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        address: user.address || '',
-        joinDate: user.createdAt || user.joinDate || '',
-        licenseNumber: user.licenseNumber || '',
-        licenseExpiry: user.licenseExpiry || '',
-        vehicleMake: user.vehicle?.make || user.vehicleMake || '',
-        vehicleModel: user.vehicle?.model || user.vehicleModel || '',
-        vehicleYear: user.vehicle?.year || user.vehicleYear || '',
-        vehiclePlate: user.vehicle?.plate || user.vehiclePlate || '',
-        vehicleColor: user.vehicle?.color || user.vehicleColor || ''
-      });
-    }
-  }, [profileWrapper]);
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Driver Profile</h1>
-          <p className="text-gray-600">Manage your driver profile and vehicle information</p>
-        </div>
-        {!isEditing ? (
-          <Button onClick={() => setIsEditing(true)}>
-            <Edit className="mr-2 h-4 w-4" />
-            Edit Profile
-          </Button>
-        ) : (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave}>
-              <Save className="mr-2 h-4 w-4" />
-              Save Changes
-            </Button>
+    <div className="max-w-6xl mx-auto px-6 py-10 font-sans">
+      <header className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
+        <div className="flex items-center gap-4">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-gray-200 to-gray-100 flex items-center justify-center text-2xl font-semibold text-gray-700 shadow">
+            {u?.firstName?.[0] ?? u?.fullName?.[0] ?? "D"}
           </div>
-        )}
-      </div>
-
-  {/* Stats Cards */}
-  {profileLoading && <div>Loading profile...</div>}
-  {profileError && <div className="text-red-600">Failed to load driver profile. Check console for details.</div>}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Rides</CardTitle>
-            <Car className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalRides.toLocaleString()}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rating</CardTitle>
-            <Star className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.rating}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Earnings</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${stats.totalEarnings.toLocaleString()}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completion</CardTitle>
-            <Shield className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.completionRate}%</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Response Time</CardTitle>
-            <Clock className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.responseTime}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Hours</CardTitle>
-            <Clock className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.activeHours}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Profile Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Profile Information */}
-        <div className="lg:col-span-2">
-          <Tabs defaultValue="personal" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="personal">Personal Info</TabsTrigger>
-              <TabsTrigger value="vehicle">Vehicle Info</TabsTrigger>
-              <TabsTrigger value="documents">Documents</TabsTrigger>
-              <TabsTrigger value="security">Security</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="personal">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Personal Information</CardTitle>
-                  <CardDescription>
-                    Update your personal details and contact information
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Full Name</Label>
-                      <Input
-                        id="name"
-                        value={profileData.name}
-                        onChange={(e) => handleInputChange('name', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email Address</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={profileData.email}
-                        onChange={(e) => handleInputChange('email', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <Input
-                        id="phone"
-                        value={profileData.phone}
-                        onChange={(e) => handleInputChange('phone', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="license">License Number</Label>
-                      <Input
-                        id="license"
-                        value={profileData.licenseNumber}
-                        onChange={(e) => handleInputChange('licenseNumber', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Input
-                      id="address"
-                      value={profileData.address}
-                      onChange={(e) => handleInputChange('address', e.target.value)}
-                      disabled={!isEditing}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="vehicle">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Vehicle Information</CardTitle>
-                  <CardDescription>
-                    Manage your vehicle details and registration
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="make">Vehicle Make</Label>
-                      <Input
-                        id="make"
-                        value={profileData.vehicleMake}
-                        onChange={(e) => handleInputChange('vehicleMake', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="model">Vehicle Model</Label>
-                      <Input
-                        id="model"
-                        value={profileData.vehicleModel}
-                        onChange={(e) => handleInputChange('vehicleModel', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="year">Year</Label>
-                      <Input
-                        id="year"
-                        value={profileData.vehicleYear}
-                        onChange={(e) => handleInputChange('vehicleYear', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="color">Color</Label>
-                      <Input
-                        id="color"
-                        value={profileData.vehicleColor}
-                        onChange={(e) => handleInputChange('vehicleColor', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="plate">License Plate</Label>
-                    <Input
-                      id="plate"
-                      value={profileData.vehiclePlate}
-                      onChange={(e) => handleInputChange('vehiclePlate', e.target.value)}
-                      disabled={!isEditing}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="documents">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Documents & Verification</CardTitle>
-                  <CardDescription>
-                    Manage your documents and verification status
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <div className="font-medium">Driver's License</div>
-                        <div className="text-sm text-gray-500">Expires: {profileData.licenseExpiry}</div>
-                      </div>
-                      <Badge className="bg-green-100 text-green-800">Verified</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <div className="font-medium">Vehicle Registration</div>
-                        <div className="text-sm text-gray-500">Updated 3 months ago</div>
-                      </div>
-                      <Badge className="bg-green-100 text-green-800">Verified</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <div className="font-medium">Insurance Certificate</div>
-                        <div className="text-sm text-gray-500">Valid until Dec 2024</div>
-                      </div>
-                      <Badge className="bg-green-100 text-green-800">Verified</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <div className="font-medium">Background Check</div>
-                        <div className="text-sm text-gray-500">Completed 6 months ago</div>
-                      </div>
-                      <Badge className="bg-green-100 text-green-800">Clear</Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-            <TabsContent value="security">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Security</CardTitle>
-                  <CardDescription>
-                    Change your password and manage security settings
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Current Password</Label>
-                      <Input
-                        id="currentPassword"
-                        type="password"
-                        value={passwordData.currentPassword}
-                        onChange={(e) => setPasswordData(p => ({ ...p, currentPassword: e.target.value }))}
-                        disabled={passwordUpdating}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">New Password</Label>
-                      <Input
-                        id="newPassword"
-                        type="password"
-                        value={passwordData.newPassword}
-                        onChange={(e) => setPasswordData(p => ({ ...p, newPassword: e.target.value }))}
-                        disabled={passwordUpdating}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                      <Input
-                        id="confirmPassword"
-                        type="password"
-                        value={passwordData.confirmPassword}
-                        onChange={(e) => setPasswordData(p => ({ ...p, confirmPassword: e.target.value }))}
-                        disabled={passwordUpdating}
-                      />
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={async () => {
-                          if (passwordData.newPassword !== passwordData.confirmPassword) {
-                            try { toast({ title: 'Validation', description: 'New password and confirmation do not match', variant: 'destructive' }); } catch(e) { console.debug(e); }
-                            return;
-                          }
-                          if (!passwordData.currentPassword || !passwordData.newPassword) {
-                            try { toast({ title: 'Validation', description: 'Please fill all password fields', variant: 'destructive' }); } catch(e) { console.debug(e); }
-                            return;
-                          }
-                          setPasswordUpdating(true);
-                          try {
-                            // Backend may expect currentPassword and password/newPassword fields
-                            await updateProfile({ password: passwordData.newPassword }).unwrap();
-                            try { toast({ title: 'Success', description: 'Password updated' }); } catch(e) { console.debug(e); }
-                            setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-                          } catch (err) {
-                            console.error('Password update failed', err);
-                            try { toast({ title: 'Error', description: 'Failed to update password', variant: 'destructive' }); } catch(e) { console.debug(e); }
-                          } finally {
-                            setPasswordUpdating(false);
-                          }
-                        }}
-                        disabled={passwordUpdating}
-                      >
-                        Update Password
-                      </Button>
-                      <Button variant="outline" onClick={() => setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })}>
-                        Reset
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          <div>
+            {isEditing ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    className="px-3 py-2 border rounded w-40"
+                    value={form.firstName}
+                    onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                    placeholder="First name"
+                  />
+                  <input
+                    className="px-3 py-2 border rounded w-40"
+                    value={form.lastName}
+                    onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                    placeholder="Last name"
+                  />
+                </div>
+                <input
+                  className="px-3 py-2 border rounded w-full"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="Email"
+                />
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Phone className="w-4 h-4" />{" "}
+                  <input
+                    className="px-2 py-1 border rounded"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    placeholder="Phone"
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
+                  {u?.fullName ?? `${u?.firstName ?? ""} ${u?.lastName ?? ""}`}
+                </h1>
+                <p className="text-sm text-gray-500">{u?.email ?? "—"}</p>
+                <p className="text-sm text-gray-500 flex items-center gap-2">
+                  <Phone className="w-4 h-4" /> {u?.phone ?? "—"}
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Profile Card */}
-        <div>
-          <Card>
-            <CardHeader className="text-center pb-6">
-              <div className="relative mx-auto">
-                <Avatar className="h-24 w-24 mx-auto">
-                  <AvatarImage src="/api/placeholder/96/96" alt={profileData.name} />
-                  <AvatarFallback className="text-lg">
-                    {profileData.name.split(' ').map(n => n[0]).join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full p-0"
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col text-right">
+            <span className="text-sm text-gray-500">Joined</span>
+            <span className="font-medium text-gray-700">
+              {driver.joinedAt
+                ? new Date(driver.joinedAt).toLocaleDateString()
+                : driver.createdAt
+                ? new Date(driver.createdAt).toLocaleDateString()
+                : "—"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Badge
+              variant={driver.approvalStatus === "approved" ? "default" : "secondary"}
+              className="capitalize"
+            >
+              {driver.approvalStatus ?? "pending"}
+            </Badge>
+
+            <button
+              onClick={handleToggleOnline}
+              disabled={toggling}
+              className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border shadow-sm hover:shadow-md"
+              title="Toggle online"
+            >
+              {driver.isOnline ? (
+                <CheckCircle className="w-4 h-4 text-green-600" />
+              ) : (
+                <XCircle className="w-4 h-4 text-red-600" />
+              )}
+              <span className="text-sm">{driver.isOnline ? "Online" : "Offline"}</span>
+            </button>
+
+            {isEditing ? (
+              <>
+                <button
+                  onClick={handleSave}
+                  disabled={updatingProfile}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-green-600 text-white hover:bg-green-700"
                 >
-                  <Camera className="h-4 w-4" />
-                </Button>
-              </div>
-              <CardTitle className="mt-4">{profileData.name}</CardTitle>
-              <CardDescription>Professional Driver</CardDescription>
-              <div className="flex justify-center items-center gap-1 mt-2">
-                <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                <span className="font-medium">{stats.rating}</span>
-                <span className="text-sm text-gray-500">({stats.totalRides} rides)</span>
-              </div>
+                  <CheckCircle className="w-4 h-4" />{" "}
+                  <span className="text-sm">{updatingProfile ? "Saving..." : "Save"}</span>
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 text-gray-800 hover:bg-gray-200"
+                >
+                  <XCircle className="w-4 h-4" /> <span className="text-sm">Cancel</span>
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleEditClick}
+                className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                title="Edit profile"
+              >
+                <Edit2 className="w-4 h-4" /> <span className="text-sm">Edit</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <Card className="col-span-2 shadow-lg border border-gray-100">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <User className="w-5 h-5 text-blue-600" /> Personal & Account
+            </CardTitle>
+            <CardDescription className="text-sm text-gray-500">
+              Core account and verification details
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-gray-600">Full name</p>
+              <p className="font-medium text-gray-800">{u?.fullName}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Email</p>
+              <p className="font-medium text-gray-800 flex items-center gap-2">
+                <Mail className="w-4 h-4 text-gray-400" /> {u?.email ?? "—"}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-600">Phone</p>
+              <p className="font-medium text-gray-800 flex items-center gap-2">
+                <Phone className="w-4 h-4 text-gray-400" /> {u?.phone ?? "—"}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-600">Approval notes</p>
+              <p className="font-medium text-gray-800">{driver.approvalNotes ?? "—"}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <aside className="space-y-4">
+          <Card className="shadow-lg border border-gray-100">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-yellow-500" /> Rating
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-sm">
-                  <Mail className="h-4 w-4 text-gray-400" />
-                  <span>{profileData.email}</span>
+            <CardContent className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-3xl font-semibold text-gray-800">
+                  {driver.rating?.average ?? driver.rating ?? 0}
                 </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  <Phone className="h-4 w-4 text-gray-400" />
-                  <span>{profileData.phone}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  <Car className="h-4 w-4 text-gray-400" />
-                  <span>{profileData.vehicleYear} {profileData.vehicleMake} {profileData.vehicleModel}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  <MapPin className="h-4 w-4 text-gray-400" />
-                  <span>{profileData.address}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  <Calendar className="h-4 w-4 text-gray-400" />
-                  <span>Member since {profileData.joinDate}</span>
+                <div className="text-sm text-gray-500">
+                  {driver.rating?.count ?? 0} reviews
                 </div>
               </div>
-              
-              <Separator />
-              
-              <div className="space-y-2">
-                <Button variant="outline" className="w-full justify-start">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Driver Settings
-                </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <Shield className="mr-2 h-4 w-4" />
-                  Safety Center
-                </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <DollarSign className="mr-2 h-4 w-4" />
-                  Earnings Report
-                </Button>
+              <div className="text-right">
+                <div className="text-sm text-gray-500">Earnings</div>
+                <div className="text-lg font-medium text-gray-800">
+                  ${driver.earnings?.total ?? driver.totalEarnings ?? 0}
+                </div>
+                <div className="text-xs text-gray-400">This month: ${driver.earnings?.thisMonth ?? 0}</div>
               </div>
             </CardContent>
           </Card>
-        </div>
-      </div>
+
+          <Card className="shadow-lg border border-gray-100">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-green-600" /> Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-2">
+              <div className="text-sm text-gray-500">Total rides</div>
+              <div className="font-medium text-gray-800">{driver.totalRides ?? 0}</div>
+              <div className="text-sm text-gray-500">Active</div>
+              <div className="font-medium text-gray-800">{driver.isOnline ? "Yes" : "No"}</div>
+              <div className="text-sm text-gray-500">Joined</div>
+              <div className="font-medium text-gray-800">
+                {driver.joinedAt ? new Date(driver.joinedAt).toLocaleDateString() : "—"}
+              </div>
+              <div className="text-sm text-gray-500">Verified</div>
+              <div className="font-medium text-gray-800 capitalize">{driver.approvalStatus ?? "—"}</div>
+            </CardContent>
+          </Card>
+        </aside>
+      </section>
+
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <Card className="shadow border border-gray-100">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Car className="w-4 h-4 text-green-600" /> Vehicle
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="text-sm text-gray-500">Make / Model</div>
+            <div className="font-medium text-gray-800">{v?.make ?? "—"} {v?.model ? ` / ${v.model}` : ""}</div>
+
+            <div className="text-sm text-gray-500">Year</div>
+            <div className="font-medium text-gray-800">{v?.year ?? "—"}</div>
+
+            <div className="text-sm text-gray-500">Color</div>
+            <div className="font-medium text-gray-800">{v?.color ?? "—"}</div>
+
+            <div className="text-sm text-gray-500">Plate</div>
+            <div className="font-medium text-gray-800">{v?.plateNumber ?? v?.licensePlate ?? "—"}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow border border-gray-100">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-red-600" /> Current Location
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-gray-500">Type</div>
+            <div className="font-medium text-gray-800">{driver.currentLocation?.type ?? "Point"}</div>
+
+            <div className="text-sm text-gray-500 mt-2">Coordinates</div>
+            <div className="font-medium text-gray-800">
+              {driver.currentLocation?.coordinates
+                ? driver.currentLocation.coordinates.join(", ")
+                : driver.currentLocation?.latitude
+                ? `${driver.currentLocation.latitude}, ${driver.currentLocation.longitude}`
+                : "—"}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow border border-gray-100">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-purple-600" /> Documents
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              <li className="flex items-center gap-2">
+                {driver.documents?.license || driver.documentsUploaded?.license ? (
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-500" />
+                )}
+                <span className="font-medium">License</span>
+              </li>
+              <li className="flex items-center gap-2">
+                {driver.documents?.vehicleRegistration || driver.documentsUploaded?.vehicleRegistration ? (
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-500" />
+                )}
+                <span className="font-medium">Registration</span>
+              </li>
+              <li className="flex items-center gap-2">
+                {driver.documents?.insurance || driver.documentsUploaded?.insurance ? (
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-500" />
+                )}
+                <span className="font-medium">Insurance</span>
+              </li>
+            </ul>
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
-};
-
-export default DriverProfile;
+}
+// ...existing code...

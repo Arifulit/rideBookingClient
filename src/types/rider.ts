@@ -63,6 +63,13 @@ export interface Driver {
 }
 
 export interface Ride {
+  data: any;
+  success: boolean;
+  message: string;
+  _id: any;
+  data: any;
+  [x: string]: any;
+  [x: string]: boolean;
   id: string;
   riderId: string;
   driverId?: string;
@@ -232,4 +239,28 @@ export interface RideSearchParams {
   filters?: RideFilter;
   sortBy?: 'date' | 'fare' | 'duration' | 'rating';
   sortOrder?: 'asc' | 'desc';
+}
+
+export type Point = {
+  type: 'Point';
+  coordinates: [number, number]; // [longitude, latitude]
+};
+
+export type LocationPoint = {
+  address: string;
+  coordinates: Point;
+};
+
+export interface FareEstimation {
+  total: number;
+  rideType: string;
+  duration: number; // minutes
+  distance: number; // meters or km depending on backend (use meters here)
+  baseFare: number;
+  distanceFare: number;
+  timeFare: number;
+  surgeFare: number;
+  surgeMultiplier: number;
+  taxes: number;
+  discount: number;
 }

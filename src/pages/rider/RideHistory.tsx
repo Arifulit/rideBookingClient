@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -27,10 +28,63 @@ import {
 } from '@/components/ui/select';
 
 import { useGetRideHistoryQuery } from '@/redux/features/rider/riderApi';
-import type { RideSearchParams, Ride } from '@/types/rider';
+import type { RideSearchParams } from '@/types/rider';
 
 interface RideHistoryProps {
   className?: string;
+}
+
+// Extended Ride interface to handle all possible data structures
+interface Location {
+  address: string;
+  coordinates?: {
+    type: string;
+    coordinates: [number, number];
+  };
+  latitude?: number;
+  longitude?: number;
+}
+
+interface Driver {
+  id?: string;
+  _id?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+interface Ride {
+  id?: string;
+  _id?: string;
+  status: 'pending' | 'ongoing' | 'accepted' | 'completed' | 'cancelled' | 'driver-arriving' | 'in-progress';
+  pickup?: string;
+  pickupLocation?: Location;
+  destination?: string;
+  destinationLocation?: Location;
+  fare?: number | {
+    base?: number;
+    distance?: number;
+    time?: number;
+    surge?: number;
+    total?: number;
+    amount?: number;
+  };
+  rating?: number;
+  createdAt?: string;
+  date?: string;
+  driver?: Driver;
+  rideType?: string;
+}
+
+interface RideHistoryData {
+  rides: Ride[];
+  total?: number;
+  pagination?: {
+    total: number;
+    totalPages: number;
+    currentPage: number;
+    limit: number;
+  };
 }
 
 const statusConfig = {
@@ -38,6 +92,7 @@ const statusConfig = {
   accepted: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', label: 'Accepted' },
   'driver-arriving': { color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400', label: 'Driver Arriving' },
   'in-progress': { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', label: 'In Progress' },
+  ongoing: { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', label: 'Ongoing' },
   completed: { color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400', label: 'Completed' },
   cancelled: { color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400', label: 'Cancelled' },
 } as const;
@@ -63,6 +118,35 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
     refetch
   } = useGetRideHistoryQuery(searchParams);
 
+  // Helper functions
+  const getFareAmount = (fare?: number | any): number => {
+    if (typeof fare === 'number') return fare;
+    if (fare && typeof fare === 'object') {
+      return fare.total ?? fare.amount ?? fare.base ?? 0;
+    }
+    return 0;
+  };
+
+  const getLocationAddress = (primary?: string, locationObj?: Location): string => {
+    if (primary) return primary;
+    if (locationObj?.address) return locationObj.address;
+    return 'Unknown location';
+  };
+
+  const getDriverName = (driver?: Driver): string => {
+    if (!driver) return '';
+    if (driver.name) return driver.name;
+    if (driver.firstName && driver.lastName) {
+      return `${driver.firstName} ${driver.lastName}`;
+    }
+    if (driver.firstName) return driver.firstName;
+    return '';
+  };
+
+  const getRideId = (ride: Ride): string => {
+    return ride.id ?? ride._id ?? '';
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -71,13 +155,17 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
   };
 
   const formatDate = (dateString: string) => {
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(dateString));
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(dateString));
+    } catch {
+      return 'Invalid date';
+    }
   };
 
   const handleSearch = (value: string) => {
@@ -135,6 +223,11 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
       </div>
     );
   }
+
+  const typedData = rideHistoryData as RideHistoryData | undefined;
+  const rides = typedData?.rides ?? [];
+  const totalRides = typedData?.total ?? typedData?.pagination?.total ?? rides.length;
+  const totalPages = typedData?.pagination?.totalPages ?? Math.ceil(totalRides / searchParams.limit);
 
   return (
     <motion.div 
@@ -206,7 +299,9 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                   <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="ongoing">Ongoing</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="accepted">Accepted</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -287,7 +382,7 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
             </Card>
           ))}
         </div>
-      ) : rideHistoryData?.rides?.length === 0 ? (
+      ) : rides.length === 0 ? (
         <Card className="text-center py-16">
           <CardContent>
             <MapPin className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
@@ -308,19 +403,25 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
       ) : (
         <div className="space-y-4">
           <AnimatePresence>
-            {rideHistoryData?.rides?.map((ride: Ride, index: number) => {
-              const statusInfo = statusConfig[ride.status];
+            {rides.map((ride: Ride, index: number) => {
+              const statusInfo = statusConfig[ride.status] ?? statusConfig.pending;
+              const rideId = getRideId(ride);
+              const pickupAddress = getLocationAddress(ride.pickup, ride.pickupLocation);
+              const destinationAddress = getLocationAddress(ride.destination, ride.destinationLocation);
+              const fareAmount = getFareAmount(ride.fare);
+              const driverName = getDriverName(ride.driver);
+              const rideDate = ride.createdAt ?? ride.date;
               
               return (
                 <motion.div
-                  key={ride.id}
+                  key={rideId || index}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: index * 0.1 }}
                 >
                   <Card 
                     className="glass hover:shadow-md transition-all duration-200 cursor-pointer group"
-                    onClick={() => navigate(`/rider/rides/${ride.id}`)}
+                    onClick={() => navigate(`/rider/rides/${rideId}`)}
                   >
                     <CardContent className="p-6">
                       <div className="flex items-start gap-4">
@@ -337,10 +438,10 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex-1 min-w-0">
                               <h3 className="font-semibold text-foreground truncate">
-                                {ride.pickupLocation.address}
+                                {pickupAddress}
                               </h3>
                               <p className="text-sm text-muted-foreground truncate">
-                                to {ride.destinationLocation.address}
+                                to {destinationAddress}
                               </p>
                             </div>
                             
@@ -349,24 +450,26 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
                             </Badge>
                           </div>
 
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-4 w-4" />
-                              {formatDate(ride.createdAt)}
-                            </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                            {rideDate && (
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-4 w-4" />
+                                {formatDate(rideDate)}
+                              </div>
+                            )}
                             
                             <div className="flex items-center gap-1">
                               <DollarSign className="h-4 w-4" />
-                              {formatCurrency(ride.fare.total)}
+                              {formatCurrency(fareAmount)}
                             </div>
                             
-                            {ride.driver && (
+                            {driverName && (
                               <div className="flex items-center gap-1">
-                                <span>{ride.driver.name}</span>
-                                {ride.rating && (
+                                <span>{driverName}</span>
+                                {ride.rating && ride.rating > 0 && (
                                   <div className="flex items-center gap-1">
                                     <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                                    <span>{ride.rating}</span>
+                                    <span>{ride.rating.toFixed(1)}</span>
                                   </div>
                                 )}
                               </div>
@@ -393,7 +496,7 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
           </AnimatePresence>
 
           {/* Pagination */}
-          {rideHistoryData && rideHistoryData.pagination.totalPages > 1 && (
+          {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 pt-4">
               <Button
                 variant="outline"
@@ -405,14 +508,14 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
               </Button>
               
               <span className="text-sm text-muted-foreground px-4">
-                Page {searchParams.page} of {rideHistoryData.pagination.totalPages}
+                Page {searchParams.page} of {totalPages}
               </span>
               
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handlePageChange(searchParams.page + 1)}
-                disabled={searchParams.page >= rideHistoryData.pagination.totalPages}
+                disabled={searchParams.page >= totalPages}
               >
                 Next
               </Button>
@@ -420,11 +523,9 @@ export function RideHistory({ className = '' }: RideHistoryProps) {
           )}
 
           {/* Summary */}
-          {rideHistoryData && (
-            <div className="text-center text-sm text-muted-foreground">
-              Showing {rideHistoryData.rides.length} of {rideHistoryData.pagination.total} rides
-            </div>
-          )}
+          <div className="text-center text-sm text-muted-foreground">
+            Showing {rides.length} of {totalRides} rides
+          </div>
         </div>
       )}
     </motion.div>

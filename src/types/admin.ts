@@ -12,6 +12,7 @@ export interface AdminUser {
 }
 
 export interface User {
+  [x: string]: any;
   id: string;
   _id?: string;
   // Backend এ firstName, lastName আলাদা field আছে

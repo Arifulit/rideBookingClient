@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // import Bookings from "@/pages/User/Bookings";
+import RideHistory from "@/pages/rider/RideHistory";
 import { ISidebarItem } from "@/types";
 import { User, Car, Info } from "lucide-react";
 import { lazy } from "react";
@@ -6,10 +8,10 @@ import { lazy } from "react";
 const RiderDashboard = lazy(() => import("@/pages/rider/RiderDashboard"));
 const BookRide = lazy(() => import("@/pages/rider/BookRide"));
 // const Bookings = lazy(() => import("@/pages/user/Bookings"));
-const RideDetails = lazy(() => import("@/pages/shared/RideDetails"));
+// const RideDetails = lazy(() => import("@/pages/shared/RideDetails"));
 const RiderProfile = lazy(() => import("@/pages/rider/RiderProfile"));
 
-export const userSidebarItems: ISidebarItem[] = [
+export const userSidebarItems = [
   {
     title: "Main",
     items: [
@@ -25,24 +27,26 @@ export const userSidebarItems: ISidebarItem[] = [
         icon: Car,
         component: BookRide,
       },
+    
+      {
+        title: "Ride History",
+        url: "/rider/rides/history",
+        icon: Info,
+        component: RideHistory,
+      },
       {
         title: "Profile",
         url: "/rider/profile",
         icon: User,
         component: RiderProfile,
-      },
-      // {
-      //   title: "My Bookings",
-      //   url: "/rider/bookings",
-      //   icon: ClipboardList,
-      //   component: Bookings,
+       },
+      //  {
+      //   title: "Ride Details",
+      //   url: "/rides/all-riders",
+      //   icon: Info,
+      //   component: RideDetails,
+      //   hidden: true, // Add this if your sidebar supports hiding items
       // },
-      {
-        title: "Ride Details",
-        url: "/rider/rides/details",
-        icon: Info,
-        component: RideDetails,
-      },
     ],
   },
 ];

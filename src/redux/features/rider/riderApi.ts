@@ -1,12 +1,14 @@
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createApi } from '@reduxjs/toolkit/query/react';
 import axiosBaseQuery from '@/redux/axiosBaseQuery';
-import type { 
-  Ride, 
-  RideRequest, 
-  RideHistory, 
-  FareEstimation, 
-  PaymentMethod, 
-  RiderProfile, 
+import type {
+  Ride,
+  RideRequest,
+  RideHistory,
+  FareEstimation,
+  PaymentMethod,
+  RiderProfile,
   LiveRideTracking,
   RideSearchParams,
   Location
@@ -36,21 +38,21 @@ export const riderApi = createApi({
   reducerPath: 'riderApi',
   baseQuery: axiosBaseQuery(),
   tagTypes: [
-    'RideRequest', 
-    'RideHistory', 
-    'LiveRide', 
-    'PaymentMethod', 
+    'RideRequest',
+    'RideHistory',
+    'LiveRide',
+    'PaymentMethod',
     'RiderProfile',
     'Location',
-    'Ride',
+    'Rides',
+    'Ride', // single ride tag
     'Profile'
   ],
   endpoints: (builder) => ({
-    // Location Services - legacy alias kept for compatibility
+    // Location Services
     searchLocations: builder.query<Location[], { query: string } | string>({
-      // Accept either a plain string or an object { query }
-      query: (arg) => {
-        const q = typeof arg === 'string' ? arg : (arg?.query ?? '');
+      query: (arg: { query: any } | string) => {
+        const q = typeof arg === 'string' ? arg : (arg as any)?.query ?? '';
         return {
           url: '/places/search',
           method: 'GET',
@@ -59,122 +61,169 @@ export const riderApi = createApi({
       },
       providesTags: ['Location'],
     }),
-    // Ride Request
-   createRideRequest: builder.mutation<Ride, RideRequest>({
+
+    // Create ride request
+    requestRide: builder.mutation<Ride, RideRequest>({
       query: (rideData) => ({
         url: '/rides/request',
         method: 'POST',
         data: rideData,
       }),
-      invalidatesTags: ['RideRequest'],
+      transformResponse: (response: any) => {
+        const payload = response && response.data ? response.data : response;
+        return payload && payload.data && payload.data.ride ? payload.data.ride : payload?.ride ?? payload;
+      },
+      invalidatesTags: ['RideRequest', 'Rides'],
     }),
 
-    // Get Ride Details
+    // Get ride details
     getRideDetails: builder.query<Ride, string>({
       query: (rideId) => ({
-        url: `/ride/${rideId}`,
+        url: `/rides/${rideId}`,
         method: 'GET',
       }),
-      providesTags: (_result, _error, rideId) => [
-        { type: 'Ride', id: rideId },
-        'Ride'
-      ],
+      transformResponse: (response: any) => {
+        const payload = response && response.data ? response.data : response;
+        return payload && payload.data && payload.data.ride ? payload.data.ride : payload?.ride ?? payload;
+      },
+      providesTags: (_result, _error, rideId) => [{ type: 'Ride' as const, id: rideId }],
     }),
 
-    // Get Fare Estimation (accepts pickupLocation, dropoffLocation, vehicleType)
+    // Fare estimation
     getFareEstimation: builder.mutation<FareEstimation, {
-      pickupLocation: { latitude: number; longitude: number; address?: string };
-      dropoffLocation: { latitude: number; longitude: number; address?: string };
-      vehicleType?: string;
+      pickup: { latitude: number; longitude: number; address?: string };
+      destination: { latitude: number; longitude: number; address?: string };
+      rideType?: 'economy' | 'premium' | 'luxury' | string;
     }>({
-      query: ({ pickupLocation, dropoffLocation, vehicleType = 'car' }) => ({
-        url: '/ride/estimate',
+      query: ({ pickup, destination, rideType = 'economy' }) => {
+        const toLocationPoint = (loc: { latitude: number; longitude: number; address?: string }) => ({
+          address: loc.address ?? '',
+          coordinates: {
+            type: 'Point' as const,
+            coordinates: [loc.longitude, loc.latitude], // [lon, lat]
+          },
+        });
+
+        return {
+          url: '/rides/estimate',
+          method: 'POST',
+          data: {
+            pickupLocation: toLocationPoint(pickup),
+            destination: toLocationPoint(destination),
+            rideType,
+          },
+        };
+      },
+      transformResponse: (response: any) => {
+        const payload = response && response.data ? response.data : response;
+        return payload?.data ?? payload;
+      },
+    }),
+
+    // Search nearby drivers
+    searchDrivers: builder.mutation<Driver[], { latitude: number; longitude: number; radius: number }>({
+      query: (coords) => ({
+        url: '/ride/search-drivers',
         method: 'POST',
-        data: {
-          pickupLocation,
-          dropoffLocation,
-          vehicleType,
-        },
+        data: coords,
       }),
     }),
-      // Search for nearby drivers based on rider location and radius
-      searchDrivers: builder.mutation<Driver[], { latitude: number; longitude: number; radius: number }>({
-        query: (coords) => ({
-          url: '/ride/search-drivers',
-          method: 'POST',
-          data: coords,
-        }),
-        // No cache invalidation required; this is an on-demand search
-      }),
 
-    // Get Ride History
+    // Ride history (query)
     getRideHistory: builder.query<RideHistory, RideSearchParams>({
       query: (params) => ({
-        url: '/ride/my-rides',
+        url: '/rides/history',
         method: 'GET',
         params,
       }),
-      providesTags: ['Ride'],
+      transformResponse: (response: any) => {
+        const payload = response && response.data ? response.data : response;
+        if (payload?.data?.rides) return payload.data;
+        if (Array.isArray(payload?.rides)) return { rides: payload.rides, total: payload.total ?? payload.rides.length };
+        if (Array.isArray(payload)) return { rides: payload, total: payload.length };
+        return payload ?? { rides: [], total: 0 };
+      },
+      providesTags: ['Rides'],
     }),
 
-    // Cancel Ride Request
+    // Ride history (mutation) - manual trigger when needed
+    getRideHistoryMutation: builder.mutation<RideHistory, RideSearchParams>({
+      query: (params) => ({
+        url: '/rides/history',
+        method: 'GET',
+        params,
+      }),
+      transformResponse: (response: any) => {
+        const payload = response && response.data ? response.data : response;
+        if (payload?.data?.rides) return payload.data;
+        if (Array.isArray(payload?.rides)) return { rides: payload.rides, total: payload.total ?? payload.rides.length };
+        if (Array.isArray(payload)) return { rides: payload, total: payload.length };
+        return payload ?? { rides: [], total: 0 };
+      },
+      invalidatesTags: ['Rides'],
+    }),
+
+    // Cancel ride
     cancelRideRequest: builder.mutation<Ride, { rideId: string; reason?: string }>({
       query: ({ rideId, reason }) => ({
         url: `/ride/${rideId}/cancel`,
         method: 'PATCH',
         data: { reason },
       }),
-      invalidatesTags: (_result, _error, { rideId }) => [{ type: 'Ride', id: rideId }],
+      invalidatesTags: (_result, _error, { rideId }) => [{ type: 'Ride' as const, id: rideId }, 'Rides'],
     }),
 
-    // Rate Driver
-    rateDriver: builder.mutation<Ride, { 
-      rideId: string; 
+    // Rate driver
+    rateDriver: builder.mutation<Ride, {
+      rideId: string;
       driverId: string;
-      rating: number; 
-      comment?: string 
+      rating: number;
+      comment?: string;
     }>({
       query: ({ rideId, driverId, rating, comment }) => ({
         url: `/ride/${rideId}/rate`,
         method: 'PATCH',
         data: { driverId, rating, comment },
       }),
-      invalidatesTags: (_result, _error, { rideId }) => [{ type: 'Ride', id: rideId }],
+      invalidatesTags: (_result, _error, { rideId }) => [{ type: 'Ride' as const, id: rideId }, 'Rides'],
     }),
 
-    // Convenience mutation: accept { rideId, rating, feedback } from UI and map to server shape
     rateDriverSimple: builder.mutation<Ride, { rideId: string; rating: number; feedback?: string }>({
       query: ({ rideId, rating, feedback }) => ({
         url: `/ride/${rideId}/rate`,
         method: 'PATCH',
         data: { rating, comment: feedback },
       }),
-      invalidatesTags: (_result, _error, { rideId }) => [{ type: 'Ride', id: rideId }],
+      invalidatesTags: (_result, _error, { rideId }) => [{ type: 'Ride' as const, id: rideId }, 'Rides'],
     }),
 
-    // Live Ride Tracking
+    // Live tracking
     getLiveRideTracking: builder.query<LiveRideTracking, string>({
       query: (rideId) => ({
         url: `/ride/${rideId}/tracking`,
         method: 'GET',
       }),
+      providesTags: (_result, _error, rideId) => [{ type: 'LiveRide' as const, id: rideId }],
     }),
 
-    // Profile Management
+    // Profile management
     getRiderProfile: builder.query<RiderProfile, void>({
       query: () => ({
         url: '/users/profile',
         method: 'GET',
       }),
+      transformResponse: (response: any) => {
+        const payload = response && response.data ? response.data : response;
+        return payload && payload.data ? payload.data.rider ?? payload.data.user ?? payload.data : payload;
+      },
       providesTags: ['Profile'],
     }),
 
-    updateRiderProfile: builder.mutation<RiderProfile, Partial<RiderProfile>>({
-      // Backend expects PATCH for partial profile updates
-      query: (profileData) => ({
+    updateRiderProfile: builder.mutation<any, any>({
+      query: (body) => ({
         url: '/users/profile',
         method: 'PATCH',
-        data: profileData,
+        data: body,
       }),
       invalidatesTags: ['Profile'],
     }),
@@ -202,7 +251,7 @@ export const riderApi = createApi({
       invalidatesTags: ['Profile'],
     }),
 
-    // Payment Methods
+    // Payment methods
     getPaymentMethods: builder.query<PaymentMethod[], void>({
       query: () => ({
         url: '/rider/payment-methods',
@@ -236,19 +285,20 @@ export const riderApi = createApi({
       invalidatesTags: ['PaymentMethod'],
     }),
 
-    // Location Services
+    // Additional location services
     searchPlaces: builder.query<Location[], string>({
       query: (searchQuery) => ({
         url: '/places/search',
         method: 'GET',
         params: { q: searchQuery },
       }),
+      providesTags: ['Location'],
     }),
 
     getCurrentLocation: builder.query<Location, void>({
       queryFn: async () => {
         try {
-          return new Promise((resolve, reject) => {
+          return await new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
               reject(new Error('Geolocation is not supported'));
               return;
@@ -257,14 +307,13 @@ export const riderApi = createApi({
             navigator.geolocation.getCurrentPosition(
               async (position) => {
                 const { latitude, longitude } = position.coords;
-                
+
                 try {
-                  // Reverse geocoding to get address
                   const response = await fetch(
                     `/api/places/reverse-geocode?lat=${latitude}&lng=${longitude}`
                   );
                   const data = await response.json();
-                  
+
                   resolve({
                     data: {
                       address: data.address || 'Current Location',
@@ -291,16 +340,16 @@ export const riderApi = createApi({
               {
                 enableHighAccuracy: true,
                 timeout: 10000,
-                maximumAge: 300000, // 5 minutes
+                maximumAge: 300000,
               }
             );
           });
         } catch (error) {
-          return { 
-            error: { 
-              status: 'CUSTOM_ERROR', 
-              error: error instanceof Error ? error.message : 'Unknown error' 
-            } 
+          return {
+            error: {
+              status: 'CUSTOM_ERROR',
+              error: error instanceof Error ? error.message : 'Unknown error'
+            }
           };
         }
       },
@@ -311,14 +360,15 @@ export const riderApi = createApi({
 export const {
   // Location services
   useLazySearchLocationsQuery,
-  
-  // Ride requests
-  useCreateRideRequestMutation,
-  useGetFareEstimationMutation,
+  useSearchPlacesQuery,
+  useLazySearchPlacesQuery,
 
-  // Ride management
+  // Ride requests & management
+  useRequestRideMutation,
+  useGetFareEstimationMutation,
   useGetRideHistoryQuery,
   useGetRideDetailsQuery,
+  useGetRideHistoryMutationMutation,
   useCancelRideRequestMutation,
   useRateDriverMutation,
   useRateDriverSimpleMutation,
@@ -338,9 +388,9 @@ export const {
   useRemovePaymentMethodMutation,
   useSetDefaultPaymentMethodMutation,
 
-  // Additional location services
-  useSearchPlacesQuery,
-  useLazySearchPlacesQuery,
+  // Location helpers
   useGetCurrentLocationQuery,
   useLazyGetCurrentLocationQuery,
 } = riderApi;
+
+export default riderApi;
