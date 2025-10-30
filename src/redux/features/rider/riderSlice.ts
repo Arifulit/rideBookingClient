@@ -1,17 +1,18 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { Ride, Location, RideFilter } from '@/types/rider';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import type { Ride, Location, RideFilter } from "@/types/rider";
 
 interface RiderState {
   // Current ride state
   currentRide: Ride | null;
-  
+
   // Ride request form state
   rideRequest: {
     pickupLocation: Location | null;
     destinationLocation: Location | null;
-    rideType: 'economy' | 'premium' | 'luxury';
+    rideType: "economy" | "premium" | "luxury";
     scheduledTime: string | null;
-    paymentMethod: 'cash' | 'card' | 'wallet';
+    paymentMethod: "cash" | "card" | "wallet";
     passengers: number;
     notes: string;
   };
@@ -19,7 +20,7 @@ interface RiderState {
   // UI state
   isRequestingRide: boolean;
   showLiveTracking: boolean;
-  
+
   // Filters and search
   rideHistoryFilters: RideFilter;
   searchQuery: string;
@@ -36,22 +37,22 @@ interface RiderState {
 
 const initialState: RiderState = {
   currentRide: null,
-  
+
   rideRequest: {
     pickupLocation: null,
     destinationLocation: null,
-    rideType: 'economy',
+    rideType: "economy",
     scheduledTime: null,
-    paymentMethod: 'cash',
+    paymentMethod: "cash",
     passengers: 1,
-    notes: '',
+    notes: "",
   },
 
   isRequestingRide: false,
   showLiveTracking: false,
-  
+
   rideHistoryFilters: {},
-  searchQuery: '',
+  searchQuery: "",
 
   currentLocation: null,
   isLoadingLocation: false,
@@ -62,18 +63,18 @@ const initialState: RiderState = {
 };
 
 const riderSlice = createSlice({
-  name: 'rider',
+  name: "rider",
   initialState,
   reducers: {
     // Ride request management
     setPickupLocation: (state, action: PayloadAction<Location>) => {
       state.rideRequest.pickupLocation = action.payload;
-      
+
       // Add to recent locations
       const existingIndex = state.recentPickupLocations.findIndex(
-        loc => loc.address === action.payload.address
+        (loc) => loc.address === action.payload.address
       );
-      
+
       if (existingIndex === -1) {
         state.recentPickupLocations.unshift(action.payload);
         if (state.recentPickupLocations.length > 5) {
@@ -88,12 +89,12 @@ const riderSlice = createSlice({
 
     setDestinationLocation: (state, action: PayloadAction<Location>) => {
       state.rideRequest.destinationLocation = action.payload;
-      
+
       // Add to recent destinations
       const existingIndex = state.recentDestinations.findIndex(
-        loc => loc.address === action.payload.address
+        (loc) => loc.address === action.payload.address
       );
-      
+
       if (existingIndex === -1) {
         state.recentDestinations.unshift(action.payload);
         if (state.recentDestinations.length > 5) {
@@ -106,7 +107,10 @@ const riderSlice = createSlice({
       }
     },
 
-    setRideType: (state, action: PayloadAction<'economy' | 'premium' | 'luxury'>) => {
+    setRideType: (
+      state,
+      action: PayloadAction<"economy" | "premium" | "luxury">
+    ) => {
       state.rideRequest.rideType = action.payload;
     },
 
@@ -114,7 +118,10 @@ const riderSlice = createSlice({
       state.rideRequest.scheduledTime = action.payload;
     },
 
-    setPaymentMethod: (state, action: PayloadAction<'cash' | 'card' | 'wallet'>) => {
+    setPaymentMethod: (
+      state,
+      action: PayloadAction<"cash" | "card" | "wallet">
+    ) => {
       state.rideRequest.paymentMethod = action.payload;
     },
 
@@ -139,17 +146,22 @@ const riderSlice = createSlice({
     // Current ride management
     setCurrentRide: (state, action: PayloadAction<Ride | null>) => {
       state.currentRide = action.payload;
-      state.showLiveTracking = action.payload?.status === 'in_progress' || 
-                                action.payload?.status === 'driver_assigned' ||
-                                action.payload?.status === 'driver_arrived';
+      state.showLiveTracking =
+        action.payload?.status === "in_progress" ||
+        action.payload?.status === "driver_assigned" ||
+        action.payload?.status === "driver_arrived";
     },
 
-    updateRideStatus: (state, action: PayloadAction<{ rideId: string; status: Ride['status'] }>) => {
+    updateRideStatus: (
+      state,
+      action: PayloadAction<{ rideId: string; status: Ride["status"] }>
+    ) => {
       if (state.currentRide && state.currentRide.id === action.payload.rideId) {
         state.currentRide.status = action.payload.status;
-        state.showLiveTracking = action.payload.status === 'in_progress' || 
-                                  action.payload.status === 'driver_assigned' ||
-                                  action.payload.status === 'driver_arrived';
+        state.showLiveTracking =
+          action.payload.status === "in_progress" ||
+          action.payload.status === "driver_assigned" ||
+          action.payload.status === "driver_arrived";
       }
     },
 
@@ -167,7 +179,10 @@ const riderSlice = createSlice({
       state.rideHistoryFilters = action.payload;
     },
 
-    updateRideHistoryFilter: (state, action: PayloadAction<Partial<RideFilter>>) => {
+    updateRideHistoryFilter: (
+      state,
+      action: PayloadAction<Partial<RideFilter>>
+    ) => {
       state.rideHistoryFilters = {
         ...state.rideHistoryFilters,
         ...action.payload,
@@ -176,7 +191,7 @@ const riderSlice = createSlice({
 
     clearRideHistoryFilters: (state) => {
       state.rideHistoryFilters = {};
-      state.searchQuery = '';
+      state.searchQuery = "";
     },
 
     setSearchQuery: (state, action: PayloadAction<string>) => {
@@ -211,16 +226,19 @@ const riderSlice = createSlice({
       state.recentDestinations = [];
     },
 
-    removeRecentLocation: (state, action: PayloadAction<{ type: 'pickup' | 'destination'; address: string }>) => {
+    removeRecentLocation: (
+      state,
+      action: PayloadAction<{ type: "pickup" | "destination"; address: string }>
+    ) => {
       const { type, address } = action.payload;
-      
-      if (type === 'pickup') {
+
+      if (type === "pickup") {
         state.recentPickupLocations = state.recentPickupLocations.filter(
-          loc => loc.address !== address
+          (loc) => loc.address !== address
         );
       } else {
         state.recentDestinations = state.recentDestinations.filter(
-          loc => loc.address !== address
+          (loc) => loc.address !== address
         );
       }
     },
@@ -243,31 +261,31 @@ export const {
   setNotes,
   clearRideRequest,
   swapLocations,
-  
+
   // Current ride actions
   setCurrentRide,
   updateRideStatus,
-  
+
   // UI actions
   setRequestingRide,
   toggleLiveTracking,
-  
+
   // Filter actions
   setRideHistoryFilters,
   updateRideHistoryFilter,
   clearRideHistoryFilters,
   setSearchQuery,
-  
+
   // Location actions
   setCurrentLocation,
   setLoadingLocation,
   setLocationError,
   useCurrentLocationAsPickup,
-  
+
   // Recent locations
   clearRecentLocations,
   removeRecentLocation,
-  
+
   // Reset
   resetRiderState,
 } = riderSlice.actions;
