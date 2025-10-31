@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
@@ -27,7 +28,8 @@ import { Badge } from '@/components/ui/badge';
 
 import {
   useGetFareEstimationMutation,
-  useLazyGetCurrentLocationQuery
+  useLazyGetCurrentLocationQuery,
+  useRequestRideMutation
 } from '@/redux/features/rider/riderApi';
 
 import {
@@ -42,8 +44,8 @@ import {
 
 import type { RootState } from '@/redux/store';
 import type { Location } from '@/types/rider';
-import LocationSearch from './LocationSearch';
 import FareEstimationCard from './FareEstimationCard';
+import LocationSearch from './LocationSearch';
 
 // Form validation schema
 const rideRequestSchema = z.object({
@@ -102,6 +104,7 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
   // use mutation to request a single fare estimation from server
   const [getFareEstimation, { data: fareEstimation, isLoading: fareLoading }] = useGetFareEstimationMutation();
   const [, { isLoading: locationLoading }] = useLazyGetCurrentLocationQuery();
+  const [requestRide] = useRequestRideMutation();
   // we'll POST directly to the backend endpoint and manage local submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
   // const { data: paymentMethods } = useGetPaymentMethodsQuery();
@@ -130,9 +133,17 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
       (async () => {
         try {
           await getFareEstimation({
-            pickupLocation,
-            dropoffLocation: destinationLocation,
-            vehicleType: selectedRideType,
+            pickup: {
+              latitude: pickupLocation.latitude,
+              longitude: pickupLocation.longitude,
+              address: pickupLocation.address,
+            },
+            destination: {
+              latitude: destinationLocation.latitude,
+              longitude: destinationLocation.longitude,
+              address: destinationLocation.address,
+            },
+            rideType: selectedRideType,
           }).unwrap();
         } catch {
           // ignore estimation errors; UI will show nothing
@@ -220,7 +231,7 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
 
     const payload = {
       pickupLocation: formatLocationToGeo(data.pickupLocation),
-      destination: formatLocationToGeo(data.destinationLocation),
+      destinationLocation: formatLocationToGeo(data.destinationLocation),
       rideType: data.rideType,
       paymentMethod: data.paymentMethod,
       passengers: data.passengers,
@@ -230,29 +241,13 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
 
     try {
       setIsSubmitting(true);
-
-      const res = await fetch('http://localhost:5000/api/v1/rides/request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        const message = result?.message || 'Failed to create ride request';
-        toast.error(message);
-        return;
-      }
-
+    // call RTK Query mutation (assumes server returns created ride object)
+      const result = await requestRide(payload).unwrap();
       toast.success('Ride requested successfully!');
-      // backend should return an id or similar
-      onSuccess?.(result.id || result._id || '');
-
-    } catch (err) {
-      toast.error('Network error while creating ride request');
+      onSuccess?.(result.id || result._id || result.rideId || '');
+      } catch (err: any) {
+      const message = err?.data?.message || err?.message || 'Failed to create ride request';
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

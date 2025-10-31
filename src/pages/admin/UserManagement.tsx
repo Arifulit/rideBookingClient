@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-
+'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback, useEffect } from 'react';
 import {
@@ -16,12 +16,14 @@ import {
   Car,
   Star,
   DollarSign,
-  FileText
+  FileText,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useSelector } from 'react-redux';
 import { selectUser, selectIsAuthenticated } from '@/redux/store';
+import { unparse } from "papaparse";  // Correct // <-- CSV generator
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +36,7 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
+  TableRow,
 } from '@/components/ui/table';
 import {
   DropdownMenu,
@@ -67,7 +69,6 @@ import {
   useSuspendDriverMutation,
   useApproveDriverMutation,
   useRejectDriverMutation,
-  useUpdateUserStatusMutation
 } from '@/redux/features/admin/adminApi';
 
 interface UserManagementProps {
@@ -83,19 +84,20 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [showUserDetails, setShowUserDetails] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const {
     data: driversData = [],
     isLoading: loadingDrivers,
     error: driversError,
-    refetch: refetchDrivers
+    refetch: refetchDrivers,
   } = useGetAllDriversQuery(undefined, { refetchOnMountOrArgChange: true });
 
   const {
     data: ridersData = [],
     isLoading: loadingRiders,
     error: ridersError,
-    refetch: refetchRiders
+    refetch: refetchRiders,
   } = useGetAllRidersQuery(undefined, { refetchOnMountOrArgChange: true });
 
   // Mutations
@@ -104,66 +106,31 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
   const [suspendDriver, { isLoading: isSuspending }] = useSuspendDriverMutation();
   const [approveDriver, { isLoading: isApproving }] = useApproveDriverMutation();
   const [rejectDriver, { isLoading: isRejecting }] = useRejectDriverMutation();
-  const [updateUserStatus] = useUpdateUserStatusMutation();
 
-  // Debug logs
-  useEffect(() => {
-    console.log('🚗 Drivers data from API:', driversData);
-  }, [driversData]);
-
-  useEffect(() => {
-    console.log('👤 Riders data from API:', ridersData);
-  }, [ridersData]);
-
-  // Helper function to safely get display name
+  // Helper: Display name
   const getDisplayName = (user: any): string => {
     if (!user) return '—';
-    
-    // Check for fullName first
-    if (user.fullName && String(user.fullName).trim()) {
-      return String(user.fullName).trim();
-    }
-    
-    // Check for firstName/lastName combination
-    const firstName = user.firstName || '';
-    const lastName = user.lastName || '';
-    const combined = `${firstName} ${lastName}`.trim();
-    
+    if (user.fullName && String(user.fullName).trim()) return String(user.fullName).trim();
+    const first = user.firstName || '';
+    const last = user.lastName || '';
+    const combined = `${first} ${last}`.trim();
     if (combined) return combined;
-    
-    // Fallback to name field
-    if (user.name && String(user.name).trim()) {
-      return String(user.name).trim();
-    }
-    
+    if (user.name && String(user.name).trim()) return String(user.name).trim();
     return '—';
   };
 
-  // Helper to get driver ID (use _id from driver document, NOT userId._id)
-  const getDriverId = (driver: any): string => {
-    return driver?._id || driver?.id || '';
-  };
+  // Helper: IDs
+  const getDriverId = (driver: any): string => driver?._id || driver?.id || '';
+  const getRiderId = (rider: any): string => rider?._id || rider?.id || '';
+  const getUserIdFromDriver = (driver: any): string => driver?.userId?._id || driver?.userId || '';
 
-  // Helper to get rider ID
-  const getRiderId = (rider: any): string => {
-    return rider?._id || rider?.id || '';
-  };
-
-  // Helper to get user ID for nested userId reference
-  const getUserIdFromDriver = (driver: any): string => {
-    return driver?.userId?._id || driver?.userId || '';
-  };
-
-  // Process drivers data - extract user info from nested userId
+  // Process Drivers
   const processedDrivers = driversData.map((driver: any) => {
     const userInfo = driver.userId || {};
     return {
       ...driver,
-      // Keep the driver _id as the main id (THIS IS IMPORTANT)
       id: getDriverId(driver),
-      // Store userId separately for block/unblock operations
       userIdForBlock: getUserIdFromDriver(driver),
-      // Merge user info at top level for easier access
       firstName: userInfo.firstName || driver.firstName,
       lastName: userInfo.lastName || driver.lastName,
       fullName: userInfo.fullName || driver.fullName,
@@ -175,20 +142,20 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
       createdAt: userInfo.createdAt || driver.createdAt,
       emailVerified: userInfo.emailVerified || false,
       lastLogin: userInfo.lastLogin,
-      role: 'driver'
+      role: 'driver',
     };
   });
 
-  // Process riders data
+  // Process Riders
   const processedRiders = ridersData.map((rider: any) => ({
     ...rider,
     id: getRiderId(rider),
     profileImage: rider.profilePicture || rider.profileImage,
     isActive: rider.isActive || 'active',
-    role: 'rider'
+    role: 'rider',
   }));
 
-  // Filter logic
+  // Filter
   const driversFiltered = processedDrivers.filter((d: any) => {
     if (!query) return true;
     const name = getDisplayName(d).toLowerCase();
@@ -208,17 +175,77 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
     refetchRiders();
   };
 
-  // Handler functions - IMPORTANT: Use correct IDs for different operations
+  // === CSV EXPORT FUNCTION ===
+  const exportToCSV = useCallback(() => {
+    setIsExporting(true);
+
+    const getExportData = () => {
+      const drivers = driversFiltered.map((d) => ({
+        Role: 'Driver',
+        Name: getDisplayName(d),
+        Email: d.email || '',
+        Phone: d.phone || '',
+        'Driver ID': d.id,
+        'Vehicle': d.vehicleInfo
+          ? `${d.vehicleInfo.make || ''} ${d.vehicleInfo.model || ''}`.trim()
+          : '',
+        'Plate': d.vehicleInfo?.plateNumber || d.vehicleInfo?.registrationNumber || '',
+        Status: d.isBlocked ? 'Blocked' : (d.approvalStatus || 'Pending'),
+        'Joined Date': d.createdAt
+          ? new Date(d.createdAt).toLocaleDateString()
+          : '',
+      }));
+
+      const riders = ridersFiltered.map((r) => ({
+        Role: 'Rider',
+        Name: getDisplayName(r),
+        Email: r.email || '',
+        Phone: r.phone || '',
+        'Rider ID': r.id,
+        Status: r.isBlocked ? 'Blocked' : 'Active',
+        'Joined Date': r.createdAt
+          ? new Date(r.createdAt).toLocaleDateString()
+          : '',
+      }));
+
+      if (searchRole === 'drivers') return drivers;
+      if (searchRole === 'riders') return riders;
+      return [...drivers, ...riders];
+    };
+
+    const data = getExportData();
+
+    if (data.length === 0) {
+      toast.error('No data to export');
+      setIsExporting(false);
+      return;
+    }
+
+    const csv = unparse(data);
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const filename = `users_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success(`Exported ${data.length} record(s) to CSV`);
+    setIsExporting(false);
+  }, [driversFiltered, ridersFiltered, searchRole]);
+
+  // Handlers
   const handleBlockUser = useCallback(async (userId: string) => {
     try {
       setProcessingId(userId);
-      console.log('🚫 Blocking user with userId:', userId);
       await blockUser({ userId }).unwrap();
-      toast.success('User blocked successfully');
+      toast.success('User blocked');
       refetchAll();
     } catch (err: any) {
-      console.error('❌ Block error:', err);
-      toast.error(err?.data?.message || 'Block failed');
+      toast.error(err?.data?.message || 'Failed to block');
     } finally {
       setProcessingId(null);
     }
@@ -227,13 +254,11 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
   const handleUnblockUser = useCallback(async (userId: string) => {
     try {
       setProcessingId(userId);
-      console.log('✅ Unblocking user with userId:', userId);
       await unblockUser({ userId }).unwrap();
-      toast.success('User unblocked successfully');
+      toast.success('User unblocked');
       refetchAll();
     } catch (err: any) {
-      console.error('❌ Unblock error:', err);
-      toast.error(err?.data?.message || 'Unblock failed');
+      toast.error(err?.data?.message || 'Failed to unblock');
     } finally {
       setProcessingId(null);
     }
@@ -242,13 +267,11 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
   const handleSuspendDriver = useCallback(async (driverId: string) => {
     try {
       setProcessingId(driverId);
-      console.log('⏸️ Suspending driver with driverId:', driverId);
       await suspendDriver({ userId: driverId }).unwrap();
-      toast.success('Driver suspended successfully');
+      toast.success('Driver suspended');
       refetchAll();
     } catch (err: any) {
-      console.error('❌ Suspend error:', err);
-      toast.error(err?.data?.message || 'Suspend failed');
+      toast.error(err?.data?.message || 'Failed to suspend');
     } finally {
       setProcessingId(null);
     }
@@ -257,13 +280,11 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
   const handleApproveDriver = useCallback(async (driverId: string) => {
     try {
       setProcessingId(driverId);
-      console.log('✅ Approving driver with driverId:', driverId);
       await approveDriver({ userId: driverId }).unwrap();
-      toast.success('Driver approved successfully');
+      toast.success('Driver approved');
       refetchAll();
     } catch (err: any) {
-      console.error('❌ Approve error:', err);
-      toast.error(err?.data?.message || 'Approve failed');
+      toast.error(err?.data?.message || 'Failed to approve');
     } finally {
       setProcessingId(null);
     }
@@ -272,36 +293,26 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
   const handleRejectDriver = useCallback(async (driverId: string) => {
     try {
       setProcessingId(driverId);
-      console.log('❌ Rejecting driver with driverId:', driverId);
       await rejectDriver({ userId: driverId }).unwrap();
-      toast.success('Driver rejected successfully');
+      toast.success('Driver rejected');
       refetchAll();
     } catch (err: any) {
-      console.error('❌ Reject error:', err);
-      toast.error(err?.data?.message || 'Reject failed');
+      toast.error(err?.data?.message || 'Failed to reject');
     } finally {
       setProcessingId(null);
     }
   }, [rejectDriver]);
 
-  // Utility functions
+  // Status helpers
   const getStatusColor = (item: any) => {
     if (item.isBlocked) return 'bg-red-100 text-red-800';
     const status = String(item.isActive || item.approvalStatus || '').toLowerCase();
     switch (status) {
-      case 'active':
-      case 'approved':
-        return 'bg-green-100 text-green-800';
-      case 'suspended':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'rejected':
-        return 'bg-red-100 text-red-800';
-      case 'pending':
-        return 'bg-blue-100 text-blue-800';
-      case 'inactive':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      case 'active': case 'approved': return 'bg-green-100 text-green-800';
+      case 'suspended': return 'bg-yellow-100 text-yellow-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'pending': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -327,7 +338,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
         <div>
           <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
           <p className="text-gray-600 mt-1">
-            Manage drivers and riders • Backend Integration Active
+            Manage drivers and riders • Real-time data
           </p>
         </div>
 
@@ -347,7 +358,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All (Drivers & Riders)</SelectItem>
+              <SelectItem value="all">All Users</SelectItem>
               <SelectItem value="drivers">Drivers Only</SelectItem>
               <SelectItem value="riders">Riders Only</SelectItem>
             </SelectContent>
@@ -358,9 +369,23 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
             Refresh
           </Button>
 
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4 mr-2" />
-            Export
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToCSV}
+            disabled={isExporting || (driversFiltered.length === 0 && ridersFiltered.length === 0)}
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -374,7 +399,6 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
               Drivers ({driversFiltered.length})
             </CardTitle>
           </CardHeader>
-
           <CardContent>
             {loadingDrivers ? (
               <div className="flex items-center justify-center py-12">
@@ -385,7 +409,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
               <div className="text-center py-8">
                 <Shield className="w-12 h-12 mx-auto mb-2 text-red-500" />
                 <p className="text-sm text-red-600">Failed to load drivers</p>
-                <Button onClick={() => refetchDrivers()} className="mt-3" variant="outline">
+                <Button onClick={refetchDrivers} className="mt-3" variant="outline">
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Retry
                 </Button>
@@ -411,10 +435,10 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                   <TableBody>
                     <AnimatePresence>
                       {driversFiltered.map((driver: any) => {
-                        const driverId = driver.id; // Driver document _id
-                        const userId = driver.userIdForBlock; // User document _id for block/unblock
+                        const driverId = driver.id;
+                        const userId = driver.userIdForBlock;
                         const displayName = getDisplayName(driver);
-                        
+
                         return (
                           <motion.tr
                             key={driverId}
@@ -426,19 +450,12 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                             <TableCell>
                               <div className="flex items-center gap-3">
                                 <Avatar className="w-10 h-10">
-                                  <AvatarImage
-                                    src={driver.profileImage}
-                                    alt={displayName}
-                                  />
-                                  <AvatarFallback>
-                                    {displayName.charAt(0).toUpperCase()}
-                                  </AvatarFallback>
+                                  <AvatarImage src={driver.profileImage} alt={displayName} />
+                                  <AvatarFallback>{displayName[0]}</AvatarFallback>
                                 </Avatar>
                                 <div>
                                   <div className="font-medium">{displayName}</div>
-                                  <div className="text-xs text-gray-500">
-                                    Driver ID: {driverId.slice(-8)}
-                                  </div>
+                                  <div className="text-xs text-gray-500">ID: {driverId.slice(-8)}</div>
                                 </div>
                               </div>
                             </TableCell>
@@ -446,9 +463,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                               <div className="text-sm space-y-1">
                                 <div className="flex items-center gap-1">
                                   <Mail className="w-3 h-3 text-gray-400" />
-                                  <span className="truncate max-w-[200px]">
-                                    {driver.email || '—'}
-                                  </span>
+                                  <span className="truncate max-w-[200px]">{driver.email || '—'}</span>
                                 </div>
                                 {driver.phone && (
                                   <div className="flex items-center gap-1">
@@ -470,7 +485,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                                     </div>
                                   </>
                                 ) : (
-                                  <span className="text-gray-400">No vehicle</span>
+                                  <span className="text-gray-400">—</span>
                                 )}
                               </div>
                             </TableCell>
@@ -482,9 +497,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                             <TableCell>
                               <div className="flex items-center gap-1 text-sm text-gray-600">
                                 <Calendar className="w-3 h-3" />
-                                {driver.joinedAt
-                                  ? new Date(driver.joinedAt).toLocaleDateString()
-                                  : driver.createdAt
+                                {driver.createdAt
                                   ? new Date(driver.createdAt).toLocaleDateString()
                                   : '—'}
                               </div>
@@ -495,7 +508,6 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => {
-                                    console.log('👁️ Viewing driver:', driver);
                                     setSelectedUser(driver);
                                     setShowUserDetails(true);
                                   }}
@@ -512,31 +524,20 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                                   <DropdownMenuContent align="end" className="w-56">
                                     <DropdownMenuLabel>Driver Actions</DropdownMenuLabel>
                                     <DropdownMenuSeparator />
-
                                     <DropdownMenuItem
                                       onClick={() => handleApproveDriver(driverId)}
-                                      disabled={
-                                        processingId === driverId ||
-                                        isApproving ||
-                                        driver.approvalStatus === 'approved'
-                                      }
+                                      disabled={processingId === driverId || isApproving || driver.approvalStatus === 'approved'}
                                       className="text-green-600"
                                     >
-                                      ✅ Approve Driver
+                                      Approve Driver
                                     </DropdownMenuItem>
-
                                     <DropdownMenuItem
                                       onClick={() => handleRejectDriver(driverId)}
-                                      disabled={
-                                        processingId === driverId ||
-                                        isRejecting ||
-                                        driver.approvalStatus === 'rejected'
-                                      }
+                                      disabled={processingId === driverId || isRejecting || driver.approvalStatus === 'rejected'}
                                       className="text-red-600"
                                     >
-                                      ❌ Reject Driver
+                                      Reject Driver
                                     </DropdownMenuItem>
-
                                     {driver.approvalStatus === 'approved' && (
                                       <>
                                         <DropdownMenuSeparator />
@@ -545,20 +546,18 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                                           disabled={processingId === driverId || isSuspending}
                                           className="text-yellow-600"
                                         >
-                                          ⏸️ Suspend Driver
+                                          Suspend Driver
                                         </DropdownMenuItem>
                                       </>
                                     )}
-
                                     <DropdownMenuSeparator />
-
                                     {!driver.isBlocked ? (
                                       <DropdownMenuItem
                                         onClick={() => handleBlockUser(userId)}
                                         disabled={processingId === driverId || isBlocking}
                                         className="text-red-600"
                                       >
-                                        🚫 Block Driver
+                                        Block Driver
                                       </DropdownMenuItem>
                                     ) : (
                                       <DropdownMenuItem
@@ -566,7 +565,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                                         disabled={processingId === driverId || isUnblocking}
                                         className="text-green-600"
                                       >
-                                        ✅ Unblock Driver
+                                        Unblock Driver
                                       </DropdownMenuItem>
                                     )}
                                   </DropdownMenuContent>
@@ -594,7 +593,6 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
               Riders ({ridersFiltered.length})
             </CardTitle>
           </CardHeader>
-
           <CardContent>
             {loadingRiders ? (
               <div className="flex items-center justify-center py-12">
@@ -605,7 +603,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
               <div className="text-center py-8">
                 <Shield className="w-12 h-12 mx-auto mb-2 text-red-500" />
                 <p className="text-sm text-red-600">Failed to load riders</p>
-                <Button onClick={() => refetchRiders()} className="mt-3" variant="outline">
+                <Button onClick={refetchRiders} className="mt-3" variant="outline">
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Retry
                 </Button>
@@ -643,26 +641,17 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                             <TableCell>
                               <div className="flex items-center gap-3">
                                 <Avatar className="w-10 h-10">
-                                  <AvatarImage
-                                    src={rider.profileImage}
-                                    alt={displayName}
-                                  />
-                                  <AvatarFallback>
-                                    {displayName.charAt(0).toUpperCase()}
-                                  </AvatarFallback>
+                                  <AvatarImage src={rider.profileImage} alt={displayName} />
+                                  <AvatarFallback>{displayName[0]}</AvatarFallback>
                                 </Avatar>
                                 <div>
                                   <div className="font-medium flex items-center gap-2">
                                     {displayName}
                                     {rider.isBlocked && (
-                                      <Badge className="bg-red-100 text-red-800 text-xs">
-                                        Blocked
-                                      </Badge>
+                                      <Badge className="bg-red-100 text-red-800 text-xs">Blocked</Badge>
                                     )}
                                   </div>
-                                  <div className="text-xs text-gray-500">
-                                    Rider ID: {riderId.slice(-8)}
-                                  </div>
+                                  <div className="text-xs text-gray-500">ID: {riderId.slice(-8)}</div>
                                 </div>
                               </div>
                             </TableCell>
@@ -670,9 +659,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                               <div className="text-sm space-y-1">
                                 <div className="flex items-center gap-1">
                                   <Mail className="w-3 h-3 text-gray-400" />
-                                  <span className="truncate max-w-[200px]">
-                                    {rider.email || '—'}
-                                  </span>
+                                  <span className="truncate max-w-[200px]">{rider.email || '—'}</span>
                                 </div>
                                 {rider.phone && (
                                   <div className="flex items-center gap-1">
@@ -683,22 +670,14 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                className={
-                                  rider.isBlocked
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-green-100 text-green-800'
-                                }
-                              >
+                              <Badge className={rider.isBlocked ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}>
                                 {rider.isBlocked ? 'Blocked' : 'Active'}
                               </Badge>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1 text-sm text-gray-600">
                                 <Calendar className="w-3 h-3" />
-                                {rider.createdAt
-                                  ? new Date(rider.createdAt).toLocaleDateString()
-                                  : '—'}
+                                {rider.createdAt ? new Date(rider.createdAt).toLocaleDateString() : '—'}
                               </div>
                             </TableCell>
                             <TableCell className="text-right">
@@ -707,7 +686,6 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => {
-                                    console.log('👁️ Viewing rider:', rider);
                                     setSelectedUser(rider);
                                     setShowUserDetails(true);
                                   }}
@@ -730,7 +708,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                                         disabled={processingId === riderId || isBlocking}
                                         className="text-red-600"
                                       >
-                                        🚫 Block Rider
+                                        Block Rider
                                       </DropdownMenuItem>
                                     ) : (
                                       <DropdownMenuItem
@@ -738,7 +716,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                                         disabled={processingId === riderId || isUnblocking}
                                         className="text-green-600"
                                       >
-                                        ✅ Unblock Rider
+                                        Unblock Rider
                                       </DropdownMenuItem>
                                     )}
                                   </DropdownMenuContent>
@@ -768,21 +746,16 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
 
           {selectedUser && (
             <div className="space-y-6">
-              {/* User Header */}
+              {/* Header */}
               <div className="flex items-start gap-4">
                 <Avatar className="w-20 h-20">
-                  <AvatarImage
-                    src={selectedUser.profileImage}
-                    alt={getDisplayName(selectedUser)}
-                  />
+                  <AvatarImage src={selectedUser.profileImage} alt={getDisplayName(selectedUser)} />
                   <AvatarFallback className="text-2xl">
-                    {getDisplayName(selectedUser).charAt(0).toUpperCase()}
+                    {getDisplayName(selectedUser)[0]}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <h3 className="text-2xl font-semibold">
-                    {getDisplayName(selectedUser)}
-                  </h3>
+                  <h3 className="text-2xl font-semibold">{getDisplayName(selectedUser)}</h3>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <Badge className={getRoleColor(selectedUser.role)}>
                       {selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)}
@@ -791,9 +764,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                       {getStatusText(selectedUser)}
                     </Badge>
                     {selectedUser.emailVerified && (
-                      <Badge className="bg-green-100 text-green-800">
-                        ✓ Email Verified
-                      </Badge>
+                      <Badge className="bg-green-100 text-green-800">Email Verified</Badge>
                     )}
                   </div>
                 </div>
@@ -801,12 +772,11 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
 
               <Separator />
 
-              {/* Contact & Account Info */}
+              {/* Contact & Account */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <Mail className="w-4 h-4" />
-                    Contact Information
+                    <Mail className="w-4 h-4" /> Contact
                   </h4>
                   <div className="space-y-3 text-sm">
                     <div className="flex items-start gap-3">
@@ -830,8 +800,7 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
 
                 <div className="space-y-4">
                   <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <Shield className="w-4 h-4" />
-                    Account Information
+                    <Shield className="w-4 h-4" /> Account
                   </h4>
                   <div className="space-y-3 text-sm">
                     <div className="flex items-start gap-3">
@@ -839,17 +808,11 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                       <div>
                         <div className="text-gray-600">Joined</div>
                         <div className="font-medium">
-                          {selectedUser.joinedAt
-                            ? new Date(selectedUser.joinedAt).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })
-                            : selectedUser.createdAt
+                          {selectedUser.createdAt
                             ? new Date(selectedUser.createdAt).toLocaleDateString('en-US', {
                                 year: 'numeric',
                                 month: 'long',
-                                day: 'numeric'
+                                day: 'numeric',
                               })
                             : 'N/A'}
                         </div>
@@ -859,240 +822,31 @@ export default function UserManagement({ className = '' }: UserManagementProps) 
                       <Shield className="w-4 h-4 text-gray-400 mt-0.5" />
                       <div>
                         <div className="text-gray-600">User ID</div>
-                        <div className="font-mono text-xs font-medium">
-                          {selectedUser.id}
-                        </div>
+                        <div className="font-mono text-xs font-medium">{selectedUser.id}</div>
                       </div>
                     </div>
-                    {selectedUser.lastLogin && (
-                      <div className="flex items-start gap-3">
-                        <Calendar className="w-4 h-4 text-gray-400 mt-0.5" />
-                        <div>
-                          <div className="text-gray-600">Last Login</div>
-                          <div className="font-medium">
-                            {new Date(selectedUser.lastLogin).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Driver Specific Details */}
+              {/* Driver Specific */}
               {selectedUser.role === 'driver' && (
                 <>
                   <Separator />
                   <div className="space-y-4">
                     <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <Car className="w-4 h-4" />
-                      Driver Information
+                      <Car className="w-4 h-4" /> Driver Info
                     </h4>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* License Info */}
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <div className="text-sm text-gray-600 mb-1">License Number</div>
-                        <div className="font-medium">
-                          {selectedUser.licenseNumber || '—'}
-                        </div>
-                      </div>
-
-                      {/* Approval Status */}
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <div className="text-sm text-gray-600 mb-1">Approval Status</div>
-                        <div className="font-medium capitalize">
-                          {selectedUser.approvalStatus || 'pending'}
-                        </div>
-                      </div>
-
-                      {/* Online Status */}
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <div className="text-sm text-gray-600 mb-1">Currently Online</div>
-                        <div className="font-medium">
-                          {selectedUser.isOnline ? (
-                            <span className="text-green-600">✓ Online</span>
-                          ) : (
-                            <span className="text-gray-500">Offline</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Rating */}
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <div className="text-sm text-gray-600 mb-1">Rating</div>
-                        <div className="font-medium flex items-center gap-1">
-                          {selectedUser.rating?.average ? (
-                            <>
-                              <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                              {selectedUser.rating.average.toFixed(1)} / 5.0
-                              <span className="text-xs text-gray-500 ml-1">
-                                ({selectedUser.rating.count} reviews)
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-gray-400">No ratings yet</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Vehicle Information */}
-                    {selectedUser.vehicleInfo && (
-                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Car className="w-5 h-5 text-blue-600" />
-                          <h5 className="font-semibold text-blue-900">Vehicle Details</h5>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div>
-                            <div className="text-blue-700">Make & Model</div>
-                            <div className="font-medium text-blue-900">
-                              {selectedUser.vehicleInfo.make} {selectedUser.vehicleInfo.model}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-blue-700">Year</div>
-                            <div className="font-medium text-blue-900">
-                              {selectedUser.vehicleInfo.year || '—'}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-blue-700">Color</div>
-                            <div className="font-medium text-blue-900">
-                              {selectedUser.vehicleInfo.color || '—'}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-blue-700">Plate Number</div>
-                            <div className="font-medium text-blue-900">
-                              {selectedUser.vehicleInfo.plateNumber ||
-                                selectedUser.vehicleInfo.registrationNumber ||
-                                '—'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Earnings */}
-                    {selectedUser.earnings && (
-                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <DollarSign className="w-5 h-5 text-green-600" />
-                          <h5 className="font-semibold text-green-900">Earnings</h5>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div>
-                            <div className="text-green-700">Total Earnings</div>
-                            <div className="font-bold text-lg text-green-900">
-                              ${selectedUser.earnings.total?.toFixed(2) || '0.00'}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-green-700">This Month</div>
-                            <div className="font-bold text-lg text-green-900">
-                              ${selectedUser.earnings.thisMonth?.toFixed(2) || '0.00'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Documents Status */}
-                    {selectedUser.documentsUploaded && (
-                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <FileText className="w-5 h-5 text-purple-600" />
-                          <h5 className="font-semibold text-purple-900">Documents Status</h5>
-                        </div>
-                        <div className="space-y-2 text-sm">
-                          {Object.entries(selectedUser.documentsUploaded).map(
-                            ([key, value]: any) => (
-                              <div key={key} className="flex items-center justify-between">
-                                <span className="text-purple-700 capitalize">
-                                  {key.replace(/([A-Z])/g, ' $1').trim()}
-                                </span>
-                                <Badge
-                                  className={
-                                    value
-                                      ? 'bg-green-100 text-green-800'
-                                      : 'bg-red-100 text-red-800'
-                                  }
-                                >
-                                  {value ? '✓ Uploaded' : '✗ Missing'}
-                                </Badge>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Approval Notes */}
-                    {selectedUser.approvalNotes && (
-                      <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <div className="text-sm text-yellow-700 mb-1">Approval Notes</div>
-                        <div className="font-medium text-yellow-900">
-                          {selectedUser.approvalNotes}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {/* Rider Specific Details */}
-              {selectedUser.role === 'rider' && (
-                <>
-                  <Separator />
-                  <div className="space-y-4">
-                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      Rider Information
-                    </h4>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="p-4 bg-gray-50 rounded-lg">
-                        <div className="text-sm text-gray-600 mb-1">Account Status</div>
-                        <div className="font-medium">
-                          {selectedUser.isBlocked ? (
-                            <span className="text-red-600">🚫 Blocked</span>
-                          ) : (
-                            <span className="text-green-600">✓ Active</span>
-                          )}
-                        </div>
+                        <div className="text-sm text-gray-600 mb-1">License</div>
+                        <div className="font-medium">{selectedUser.licenseNumber || '—'}</div>
                       </div>
-
                       <div className="p-4 bg-gray-50 rounded-lg">
-                        <div className="text-sm text-gray-600 mb-1">Email Verification</div>
-                        <div className="font-medium">
-                          {selectedUser.emailVerified ? (
-                            <span className="text-green-600">✓ Verified</span>
-                          ) : (
-                            <span className="text-yellow-600">⚠ Not Verified</span>
-                          )}
-                        </div>
+                        <div className="text-sm text-gray-600 mb-1">Status</div>
+                        <div className="font-medium capitalize">{selectedUser.approvalStatus || 'pending'}</div>
                       </div>
                     </div>
-
-                    {selectedUser.isBlocked && (
-                      <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-                        <div className="flex items-center gap-2 text-red-800">
-                          <Shield className="w-5 h-5" />
-                          <span className="font-semibold">This rider is currently blocked</span>
-                        </div>
-                        <p className="text-sm text-red-700 mt-2">
-                          The rider cannot access the platform until unblocked by an administrator.
-                        </p>
-                      </div>
-                    )}
                   </div>
                 </>
               )}

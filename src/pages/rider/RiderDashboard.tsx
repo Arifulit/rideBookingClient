@@ -87,14 +87,7 @@ interface RideHistory {
   };
 }
 
-/**
- * Utility - convert various location shapes into a readable string.
- * Accepts:
- *  - string (address)
- *  - Location object with .address
- *  - GeoJSON-like { coordinates: [lon, lat] } or [lon, lat]
- *  - object with latitude / longitude
- */
+
 function formatLocationValue(val?: string | Location): string {
   if (!val && val !== '') return 'Unknown location';
 

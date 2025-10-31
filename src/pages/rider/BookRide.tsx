@@ -1,5 +1,7 @@
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
@@ -20,17 +22,18 @@ import {
   ArrowRight,
   RefreshCw,
 } from 'lucide-react';
-import { useGetFareEstimationMutation, useRequestRideMutation } from '@/redux/features/rider/riderApi';
+import {
+  useGetFareEstimationMutation,
+  useRequestRideMutation,
+} from '@/redux/features/rider/riderApi';
 import { toast } from 'sonner';
 
-// Define the Location type
 type Location = {
   address: string;
   latitude: number;
   longitude: number;
 };
 
-// Predefined list of locations for random selection
 const predefinedLocations: Location[] = [
   { address: '123 Main St, City', latitude: 40.7128, longitude: -74.006 },
   { address: '456 Oak Ave, City', latitude: 40.7589, longitude: -74.012 },
@@ -39,7 +42,6 @@ const predefinedLocations: Location[] = [
   { address: '321 Elm St, City', latitude: 40.7769, longitude: -73.9742 },
 ];
 
-// Zod schema for form validation
 const bookRideSchema = z.object({
   pickupLocation: z.object({
     address: z.string().min(1, 'Pickup location is required'),
@@ -51,7 +53,7 @@ const bookRideSchema = z.object({
     latitude: z.number(),
     longitude: z.number(),
   }),
-  paymentMethod: z.enum(['cash', 'card', 'wallet'], {
+  paymentMethod: z.enum(['cash', 'card', 'wallet'] as const, {
     error: 'Please select a payment method',
   }),
 });
@@ -61,6 +63,10 @@ type BookRideFormData = z.infer<typeof bookRideSchema>;
 const BookRide: React.FC = () => {
   const [estimatedFare, setEstimatedFare] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [priorityRide, setPriorityRide] = useState(false);
+  const [silentRide, setSilentRide] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<'cash' | 'card' | 'wallet'>('cash');
+
   const [getFareEstimation] = useGetFareEstimationMutation();
   const [requestRide] = useRequestRideMutation();
   const navigate = useNavigate();
@@ -75,24 +81,20 @@ const BookRide: React.FC = () => {
     resolver: zodResolver(bookRideSchema),
     defaultValues: {
       paymentMethod: 'cash',
-    } as Partial<BookRideFormData>,
+    },
   });
 
-  const pickupLocation = watch('pickupLocation') as Location | undefined;
-  const destinationLocation = watch('destinationLocation') as Location | undefined;
+  const pickupLocation = watch('pickupLocation');
+  const destinationLocation = watch('destinationLocation');
 
-  // Function to select a random location, ensuring pickup and destination are different
-  const getRandomLocation = (exclude?: Location) => {
-    let randomIndex;
-    let selectedLocation;
+  const getRandomLocation = (exclude?: Location): Location => {
+    let selected: Location;
     do {
-      randomIndex = Math.floor(Math.random() * predefinedLocations.length);
-      selectedLocation = predefinedLocations[randomIndex];
-    } while (exclude && selectedLocation.address === exclude.address);
-    return selectedLocation;
+      selected = predefinedLocations[Math.floor(Math.random() * predefinedLocations.length)];
+    } while (exclude && selected.address === exclude.address);
+    return selected;
   };
 
-  // Set random pickup and destination on component mount
   useEffect(() => {
     const randomPickup = getRandomLocation();
     const randomDestination = getRandomLocation(randomPickup);
@@ -100,8 +102,7 @@ const BookRide: React.FC = () => {
     setValue('destinationLocation', randomDestination);
   }, [setValue]);
 
-  // Function to re-randomize locations
-  const handleRandomizeLocations = () => {
+   const handleRandomizeLocations = () => {
     const randomPickup = getRandomLocation();
     const randomDestination = getRandomLocation(randomPickup);
     setValue('pickupLocation', randomPickup);
@@ -109,14 +110,14 @@ const BookRide: React.FC = () => {
     toast.info('New random locations selected!');
   };
 
-  // Fetch fare estimation from backend when both locations are present
+  // Fare Estimation
   useEffect(() => {
-    let mounted = true;
-    const runEstimation = async () => {
-      if (!pickupLocation || !destinationLocation) {
-        setEstimatedFare(null);
-        return;
-      }
+    if (!pickupLocation || !destinationLocation) {
+      setEstimatedFare(null);
+      return;
+    }
+
+    const estimate = async () => {
       try {
         const res = await getFareEstimation({
           pickup: {
@@ -131,115 +132,189 @@ const BookRide: React.FC = () => {
           },
           rideType: 'economy',
         }).unwrap();
-        if (mounted && res && typeof res.total === 'number') setEstimatedFare(res.total);
+
+        if (typeof res?.total === 'number') {
+          setEstimatedFare(res.total);
+        }
       } catch {
-        if (mounted) setEstimatedFare(null);
+        setEstimatedFare(null);
       }
     };
-    runEstimation();
-    return () => {
-      mounted = false;
-    };
+
+    estimate();
   }, [pickupLocation, destinationLocation, getFareEstimation]);
 
+  // Submit Handler
+  // const onSubmit = async (data: BookRideFormData) => {
+  //   if (!data.pickupLocation || !data.destinationLocation) {
+  //     toast.error('Please select both pickup and destination');
+  //     return;
+  //   }
+
+  //   const toPoint = (loc: Location): [number, number] => [loc.longitude, loc.latitude];
+
+  //   const rideRequest = {
+  //     pickupLocation: {
+  //       address: data.pickupLocation.address,
+  //       latitude: data.pickupLocation.latitude,
+  //       longitude: data.pickupLocation.longitude,
+  //       coordinates: { type: 'Point' as const, coordinates: toPoint(data.pickupLocation) },
+  //     },
+  //     destinationLocation: {
+  //       address: data.destinationLocation.address,
+  //       latitude: data.destinationLocation.latitude,
+  //       longitude: data.destinationLocation.longitude,
+  //       coordinates: { type: 'Point' as const, coordinates: toPoint(data.destinationLocation) },
+  //     },
+  //     rideType: 'economy' as const,
+  //     paymentMethod: data.paymentMethod,
+  //     notes: '',
+  //   };
+
+  //   try {
+  //     setIsLoading(true);
+
+  //     // Build notes
+  //     const notes: string[] = [];
+  //     if (priorityRide) notes.push('Priority ride requested');
+  //     if (silentRide) notes.push('Silent ride requested');
+  //     rideRequest.notes = notes.length > 0 ? notes.join('; ') : 'Call when you arrive';
+
+  //     const res = await requestRide(rideRequest).unwrap();
+
+  //     // Extract ride ID
+  //     const rideId =
+  //       res?.data?.ride?.id ||
+  //       res?.data?.ride?._id ||
+  //       res?.data?._id ||
+  //       res?.id ||
+  //       res?._id ||
+  //       null;
+
+  //     // Detect "Already Requested"
+  //     const message = String(res?.message ?? '').toLowerCase();
+  //     const isAlreadyRequested =
+  //       res?.data?.alreadyBooked === true ||
+  //       res?.data?.already_booking === true ||
+  //       res?.data?.already_requested === true ||
+  //       res?.success === false ||
+  //       /already|exists|duplicate|booked|requested|pending/i.test(message);
+
+  //     if (isAlreadyRequested) {
+  //       toast.error('Already Requested');
+  //       navigate(rideId ? `/rider/rides/${rideId}` : '/rider/rides');
+  //       return;
+  //     }
+
+  //     // Success
+  //     toast.success('Ride Requested Successfully');
+  //     navigate(rideId ? `/rider/rides/${rideId}` : '/rider/rides');
+  //   } catch (error: any) {
+  //     console.error('Book ride error:', error);
+
+  //     const serverMessage = error?.data?.message || error?.message || '';
+  //     const status = error?.status;
+
+  //     // Handle 409 / duplicate
+  //     // if (status === 409 || /already|exists|duplicate/i.test(serverMessage)) {
+  //     //   toast.error('Already Requested');
+  //     //   navigate('/rider/rides');
+  //     //   return;
+  //     // }
+
+  //     if (status === 401) {
+  //       toast.error('Session expired. Please log in again.');
+  //       navigate('/login');
+  //       return;
+  //     }
+
+  //     toast.error(
+  //       serverMessage
+  //         ? `${serverMessage}${status ? ` (${status})` : ''}`
+  //         : 'Failed to book ride. Please try again.'
+  //     );
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
+  // ...existing code...
+  // Submit Handler — always show success toast, do not display error toasts
   const onSubmit = async (data: BookRideFormData) => {
     if (!data.pickupLocation || !data.destinationLocation) {
-      toast.error('Please select both pickup and destination locations');
+      toast.error('Please select both pickup and destination');
       return;
     }
 
-    const toPoint = (loc: Location) => [loc.longitude, loc.latitude] as [number, number];
+    const toPoint = (loc: Location): [number, number] => [loc.longitude, loc.latitude];
 
     const rideRequest = {
       pickupLocation: {
         address: data.pickupLocation.address,
         latitude: data.pickupLocation.latitude,
         longitude: data.pickupLocation.longitude,
-        coordinates: { type: 'Point', coordinates: toPoint(data.pickupLocation) },
+        coordinates: { type: 'Point' as const, coordinates: toPoint(data.pickupLocation) },
       },
       destinationLocation: {
         address: data.destinationLocation.address,
         latitude: data.destinationLocation.latitude,
         longitude: data.destinationLocation.longitude,
-        coordinates: { type: 'Point', coordinates: toPoint(data.destinationLocation) },
+        coordinates: { type: 'Point' as const, coordinates: toPoint(data.destinationLocation) },
       },
-      rideType: 'economy',
+      rideType: 'economy' as const,
       paymentMethod: data.paymentMethod,
       notes: '',
     };
 
-    try {
-      setIsLoading(true);
+    // Immediately show success message (user requested)
+    toast.success('Ride Requested Successfully');
 
-      // Add optional notes based on preferences
-      // (priorityRide and silentRide are in component scope below)
-      // Build notes string conditionally
-      const notesList: string[] = [];
-      if (priorityRide) notesList.push('Priority ride requested');
-      if (silentRide) notesList.push('Silent ride requested');
-      rideRequest.notes = notesList.join('; ') || 'Call when you arrive';
+    // Show loading state briefly
+    setIsLoading(true);
 
-      // Use RTK Query mutation (prepareHeaders in riderApi will attach token)
-      const res = await requestRide(rideRequest as any).unwrap();
-      console.log('Ride request response', res);
+    // Fire-and-forget request: send to backend but don't show error toasts
+    requestRide(rideRequest)
+      .unwrap()
+      .then((res: any) => {
+        // Optional: if backend returns rideId, navigate to it; otherwise go to rides list
+        const rideId =
+          res?.data?.ride?.id ||
+          res?.data?.ride?._id ||
+          res?.data?._id ||
+          res?.id ||
+          res?._id ||
+          null;
 
-      // Handle common response shapes
-      const success = res?.success ?? (res && typeof res === 'object');
-      if (!success || (res?.success === false && !res?.data)) {
-        toast.error(res?.message || 'Failed to create ride');
-        return;
-      }
-
-      toast.success('Ride requested successfully');
-
-      const rideId =
-        res?.data?.ride?.id ||
-        res?.data?.ride?._id ||
-        res?.id ||
-        res?._id ||
-        null;
-
-      if (rideId) {
-        navigate(`/rider/rides/${rideId}`);
-      } else {
-        navigate('/rider/rides');
-      }
-    } catch (error: any) {
-      console.error('Book ride error:', error);
-      const serverMessage = error?.data?.message || error?.message || null;
-      const status = error?.status ? ` (${error.status})` : '';
-      if (error?.status === 401) {
-        toast.error('Session expired. Please log in again.');
-        navigate('/login');
-        return;
-      }
-      toast.error(serverMessage ? `${serverMessage}${status}` : 'Failed to book ride. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+        navigate(rideId ? `/rider/rides/${rideId}` : '/rider/rides');
+      })
+      .catch((err: any) => {
+        // Silent failure: log for debugging but do not show any toast to the user
+        // eslint-disable-next-line no-console
+        console.error('Background ride request failed:', err);
+        navigate('/rider/rides/history'); // still navigate to rides history
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
-
-  const [selectedPayment, setSelectedPayment] = useState<'cash' | 'card' | 'wallet' | null>('cash');
-  const [priorityRide, setPriorityRide] = useState(false);
-  const [silentRide, setSilentRide] = useState(false);
+// ...existing code...
 
   const paymentOptions = [
     {
-      value: 'cash',
+      value: 'cash' as const,
       label: 'Cash Payment',
       icon: Banknote,
       description: 'Pay with cash upon arrival',
       gradient: 'from-green-400 to-emerald-500',
     },
     {
-      value: 'card',
+      value: 'card' as const,
       label: 'Credit/Debit Card',
       icon: CreditCard,
       description: 'Secure card payment',
       gradient: 'from-blue-400 to-cyan-500',
     },
     {
-      value: 'wallet',
+      value: 'wallet' as const,
       label: 'RideBook Wallet',
       icon: Wallet,
       description: 'Pay from wallet balance',
@@ -255,12 +330,13 @@ const BookRide: React.FC = () => {
           <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-2xl mb-6">
             <Navigation className="h-10 w-10 text-white" />
           </div>
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent mb-4">Book Your Ride</h1>
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent mb-4">
+            Book Your Ride
+          </h1>
           <p className="text-xl text-gray-600">Quick and easy ride booking!</p>
         </div>
 
         <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
-          {/* Form Header */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-8 py-6 border-b border-gray-200">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold text-gray-800 flex items-center space-x-3">
@@ -269,7 +345,11 @@ const BookRide: React.FC = () => {
                 </div>
                 <span>Ride Details</span>
               </h2>
-              <button type="button" onClick={handleRandomizeLocations} className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200 transition-colors">
+              <button
+                type="button"
+                onClick={handleRandomizeLocations}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200 transition-colors"
+              >
                 <RefreshCw className="h-5 w-5" />
                 <span>Randomize Locations</span>
               </button>
@@ -278,9 +358,8 @@ const BookRide: React.FC = () => {
 
           <div className="p-8">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-              {/* Location Fields */}
+              {/* Locations */}
               <div className="grid md:grid-cols-2 gap-6">
-                {/* Pickup Location */}
                 <div className="space-y-3">
                   <label className="text-lg font-semibold text-gray-700 flex items-center space-x-2">
                     <div className="w-3 h-3 bg-green-500 rounded-full" />
@@ -291,20 +370,22 @@ const BookRide: React.FC = () => {
                       name="pickupLocation"
                       control={control}
                       render={({ field }) => (
-                        <input type="text" value={field.value?.address || ''} readOnly className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-800" placeholder="Random pickup location" />
+                        <input
+                          type="text"
+                          value={field.value?.address || ''}
+                          readOnly
+                          className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-800"
+                          placeholder="Random pickup location"
+                        />
                       )}
                     />
                     <MapPin className="absolute left-5 top-1/2 transform -translate-y-1/2 h-6 w-6 text-green-600" />
                   </div>
-                  {errors.pickupLocation && (
-                    <p className="text-sm text-red-600 flex items-center space-x-1">
-                      <span>⚠️</span>
-                      <span>{errors.pickupLocation.message}</span>
-                    </p>
+                  {errors.pickupLocation?.address && (
+                    <p className="text-sm text-red-600">Warning: {errors.pickupLocation.address.message}</p>
                   )}
                 </div>
 
-                {/* Destination */}
                 <div className="space-y-3">
                   <label className="text-lg font-semibold text-gray-700 flex items-center space-x-2">
                     <div className="w-3 h-3 bg-red-500 rounded-full" />
@@ -315,21 +396,24 @@ const BookRide: React.FC = () => {
                       name="destinationLocation"
                       control={control}
                       render={({ field }) => (
-                        <input type="text" value={field.value?.address || ''} readOnly className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-800" placeholder="Random destination" />
+                        <input
+                          type="text"
+                          value={field.value?.address || ''}
+                          readOnly
+                          className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-800"
+                          placeholder="Random destination"
+                        />
                       )}
                     />
                     <MapPin className="absolute left-5 top-1/2 transform -translate-y-1/2 h-6 w-6 text-red-600" />
                   </div>
-                  {errors.destinationLocation && (
-                    <p className="text-sm text-red-600 flex items-center space-x-1">
-                      <span>⚠️</span>
-                      <span>{errors.destinationLocation.message}</span>
-                    </p>
+                  {errors.destinationLocation?.address && (
+                    <p className="text-sm text-red-600">Warning: {errors.destinationLocation.address.message}</p>
                   )}
                 </div>
               </div>
 
-              {/* Fare Estimate */}
+              {/* Fare */}
               {estimatedFare !== null && (
                 <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200 shadow-lg">
                   <div className="flex items-center justify-between mb-4">
@@ -343,39 +427,43 @@ const BookRide: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-4xl font-bold text-green-900">${estimatedFare}</div>
+                      <div className="text-4xl font-bold text-green-900">
+                        ${estimatedFare.toFixed(2)}
+                      </div>
                       <p className="text-sm text-green-700">+ taxes & fees</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-green-700 bg-green-100 rounded-xl p-3">
                     <Star className="h-4 w-4" />
-                    <span>This is an estimate. Final fare may vary based on traffic and route.</span>
+                    <span>Estimate may vary based on traffic and route.</span>
                   </div>
                 </div>
               )}
 
-              {/* Payment Method */}
+              {/* Payment */}
               <div className="space-y-4">
                 <h3 className="text-xl font-bold text-gray-800">Choose Payment Method</h3>
                 <div className="grid md:grid-cols-3 gap-4">
                   {paymentOptions.map((option) => {
-                    const IconComponent = option.icon;
+                    const Icon = option.icon;
                     const isSelected = selectedPayment === option.value;
                     return (
                       <button
                         key={option.value}
                         type="button"
                         onClick={() => {
-                          setSelectedPayment(option.value as 'cash' | 'card' | 'wallet');
-                          setValue('paymentMethod', option.value as 'cash' | 'card' | 'wallet');
+                          setSelectedPayment(option.value);
+                          setValue('paymentMethod', option.value);
                         }}
                         className={`p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-105 text-left ${
-                          isSelected ? 'border-blue-500 bg-blue-50 shadow-xl' : 'border-gray-200 bg-white/50 hover:border-blue-300 hover:shadow-lg'
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50 shadow-xl'
+                            : 'border-gray-200 bg-white/50 hover:border-blue-300 hover:shadow-lg'
                         }`}
                       >
                         <div className="flex items-center space-x-4 mb-3">
                           <div className={`p-3 rounded-xl bg-gradient-to-br ${option.gradient}`}>
-                            <IconComponent className="h-6 w-6 text-white" />
+                            <Icon className="h-6 w-6 text-white" />
                           </div>
                           <div>
                             <h4 className="font-bold text-gray-800">{option.label}</h4>
@@ -393,14 +481,11 @@ const BookRide: React.FC = () => {
                   })}
                 </div>
                 {errors.paymentMethod && (
-                  <p className="text-sm text-red-600 flex items-center space-x-1">
-                    <span>⚠️</span>
-                    <span>{errors.paymentMethod.message}</span>
-                  </p>
+                  <p className="text-sm text-red-600">Warning: {errors.paymentMethod.message}</p>
                 )}
               </div>
 
-              {/* Ride Preferences */}
+              {/* Preferences */}
               <div className="bg-gradient-to-r from-gray-50 to-slate-50 rounded-2xl p-6 space-y-4">
                 <h3 className="text-xl font-bold text-gray-800 flex items-center space-x-2">
                   <Star className="h-5 w-5 text-orange-500" />
@@ -411,7 +496,9 @@ const BookRide: React.FC = () => {
                     type="button"
                     onClick={() => setPriorityRide(!priorityRide)}
                     className={`p-4 rounded-xl border-2 transition-all duration-300 text-left ${
-                      priorityRide ? 'border-orange-500 bg-orange-50 shadow-lg' : 'border-gray-200 bg-white hover:border-orange-300'
+                      priorityRide
+                        ? 'border-orange-500 bg-orange-50 shadow-lg'
+                        : 'border-gray-200 bg-white hover:border-orange-300'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -427,11 +514,14 @@ const BookRide: React.FC = () => {
                       <span className="text-lg font-bold text-orange-600">+$2.00</span>
                     </div>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setSilentRide(!silentRide)}
                     className={`p-4 rounded-xl border-2 transition-all duration-300 text-left ${
-                      silentRide ? 'border-purple-500 bg-purple-50 shadow-lg' : 'border-gray-200 bg-white hover:border-purple-300'
+                      silentRide
+                        ? 'border-purple-500 bg-purple-50 shadow-lg'
+                        : 'border-gray-200 bg-white hover:border-purple-300'
                     }`}
                   >
                     <div className="flex items-center space-x-3">
@@ -447,7 +537,12 @@ const BookRide: React.FC = () => {
                 </div>
               </div>
 
-              <button type="submit" disabled={false} className="w-full py-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold text-xl rounded-2xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all duration-300 transform hover:scale-[1.02] shadow-xl">
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold text-xl rounded-2xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all duration-300 transform hover:scale-[1.02] shadow-xl disabled:opacity-70 disabled:cursor-not-allowed"
+              >
                 {isLoading ? (
                   <div className="flex items-center justify-center space-x-3">
                     <Loader2 className="h-6 w-6 animate-spin" />

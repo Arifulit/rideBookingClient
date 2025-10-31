@@ -297,7 +297,7 @@ updateDriverOnlineStatus: builder.mutation<
       invalidatesTags: ["DriverProfile"],
     }),
 
-    // ...existing code...
+    
     // Get incoming ride requests (driver router)
     getIncomingRequests: builder.query<RideRequest[], void>({
       query: () => ({ url: "/drivers/rides/pending" }),

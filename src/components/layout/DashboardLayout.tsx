@@ -19,10 +19,8 @@ import {
   Menu,
   Home,
   User as UserIcon,
-  Settings,
   LogOut,
-  Bell,
-  Search,
+  
 } from 'lucide-react';
 import { ModeToggle } from '@/components/theme/ModeToggle';
 import { adminSidebarItems } from '@/routes/adminSidebarItems';
@@ -179,18 +177,7 @@ const DashboardLayout = () => {
               {/* Theme Toggle */}
               <ModeToggle />
               
-              {/* Search Button */}
-              <Button variant="ghost" size="sm">
-                <Search className="h-5 w-5" />
-              </Button>
-
-              {/* Notifications */}
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                  3
-                </span>
-              </Button>
+        
 
               {/* User Dropdown */}
               <DropdownMenu>
@@ -221,10 +208,6 @@ const DashboardLayout = () => {
                       <UserIcon className="mr-2 h-4 w-4" />
                       <span>Profile</span>
                     </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Settings</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="text-red-600">

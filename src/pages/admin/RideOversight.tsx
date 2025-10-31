@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
 import { 
   Route, 
@@ -7,7 +8,6 @@ import {
   Eye,
   Ban,
   RefreshCw,
-  AlertTriangle,
   CheckCircle,
   Clock,
   DollarSign,
@@ -67,115 +67,41 @@ import {
 // RTK Query hooks
 import { 
   useGetAdminRidesQuery,
-  useUpdateRideStatusMutation 
+  useUpdateRideStatusMutation,
+  useGetDriverRideRequestsQuery,
 } from '@/redux/features/admin/adminApi';
-import type { AdminRideOverview, RideSearchParams } from '@/types/admin';
+import { RideSearchParams } from '@/types/admin';
 
-
-
-/* const mockRides = [
-  {
-    id: 'ride_1',
-    rideId: 'RID001',
-    riderId: 'user_1',
-    driverId: 'driver_1',
-    riderName: 'John Doe',
-    driverName: 'Sarah Wilson',
-    pickupAddress: '123 Main St, New York, NY',
-    destinationAddress: '456 Broadway, New York, NY',
-    status: 'completed' as const,
-    fare: 25.50,
-    distance: 5.2,
-    duration: 18,
-    createdAt: '2024-02-15T10:30:00Z',
-    completedAt: '2024-02-15T10:48:00Z',
-    paymentStatus: 'completed' as const,
-    paymentMethod: 'Credit Card',
-    riderRating: 5,
-    driverRating: 4,
-    issues: []
-  },
-  {
-    id: 'ride_2',
-    rideId: 'RID002', 
-    riderId: 'user_2',
-    driverId: 'driver_2',
-    riderName: 'Mike Johnson',
-    driverName: 'Emily Chen',
-    pickupAddress: '789 Park Ave, New York, NY',
-    destinationAddress: '321 Wall St, New York, NY',
-    status: 'in-progress' as const,
-    fare: 18.75,
-    distance: 3.8,
-    duration: undefined,
-    createdAt: '2024-02-15T11:15:00Z',
-    completedAt: undefined,
-    paymentStatus: 'pending' as const,
-    paymentMethod: 'Apple Pay',
-    riderRating: undefined,
-    driverRating: undefined,
-    issues: [
-      {
-        id: 'issue_1',
-        type: 'complaint' as const,
-        severity: 'medium' as const,
-        description: 'Driver arrived late',
-        reportedBy: 'rider' as const,
-        status: 'open' as const,
-        createdAt: '2024-02-15T11:20:00Z'
-      }
-    ]
-  },
-  {
-    id: 'ride_3',
-    rideId: 'RID003',
-    riderId: 'user_3', 
-    driverId: undefined,
-    riderName: 'Alice Cooper',
-    driverName: undefined,
-    pickupAddress: '555 Central Park West, New York, NY',
-    destinationAddress: '777 Times Square, New York, NY',
-    status: 'cancelled' as const,
-    fare: 0,
-    distance: 0,
-    duration: undefined,
-    createdAt: '2024-02-15T12:00:00Z',
-    completedAt: undefined,
-    paymentStatus: 'refunded' as const,
-    paymentMethod: 'PayPal',
-    riderRating: undefined,
-    driverRating: undefined,
-    issues: []
-  },
-  {
-    id: 'ride_4',
-    rideId: 'RID004',
-    riderId: 'user_4',
-    driverId: undefined,
-    riderName: 'David Wilson',
-    driverName: undefined,
-    pickupAddress: '100 Fifth Avenue, New York, NY',
-    destinationAddress: '200 Madison Avenue, New York, NY',
-    status: 'pending' as const,
-    fare: 22.00,
-    distance: 4.5,
-    duration: undefined,
-    createdAt: '2024-02-15T13:00:00Z',
-    completedAt: undefined,
-    paymentStatus: 'pending' as const,
-    paymentMethod: 'Credit Card',
-    riderRating: undefined,
-    driverRating: undefined,
-    issues: []
-  }
-]; */
+interface AdminRideOverview {
+  [key: string]: any;
+  id?: string;
+  rideId?: string;
+  riderId?: string;
+  riderName?: string | null;
+  driverId?: string | null;
+  driverName?: string | null;
+  pickupAddress?: string | null;
+  destinationAddress?: string | null;
+  status?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  fare?: number | { estimated?: number } | any;
+  distance?: number | { estimated?: number } | any;
+  duration?: number | { estimated?: number } | any;
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  issues?: any[];
+  riderRating?: number | null;
+  driverRating?: number | null;
+}
 
 interface RideOversightProps {
   className?: string;
 }
 
 export function RideOversight({ className = '' }: RideOversightProps) {
-  const [searchParams, setSearchParams] = useState<RideSearchParams>({
+  const [searchParams, setSearchParams] = useState<RideSearchParams & { query?: string; paymentStatus?: string; dateFrom?: string; dateTo?: string; hasIssues?: boolean; sortBy?: string; sortOrder?: 'asc' | 'desc' }>({
     query: '',
     status: 'all',
     paymentStatus: 'all',
@@ -187,7 +113,8 @@ export function RideOversight({ className = '' }: RideOversightProps) {
     page: 1,
     limit: 10,
   });
-  
+
+
   const [selectedRide, setSelectedRide] = useState<AdminRideOverview | null>(null);
   const [showRideDetails, setShowRideDetails] = useState(false);
   const [actionRide, setActionRide] = useState<{
@@ -195,11 +122,60 @@ export function RideOversight({ className = '' }: RideOversightProps) {
     action: string;
   } | null>(null);
 
-  const { data: ridesResponse, isLoading } = useGetAdminRidesQuery(searchParams);
+  // Admin rides (existing admin API)
+  const { data: ridesResponse, isLoading: adminLoading } = useGetAdminRidesQuery(searchParams);
   const [updateRideStatus] = useUpdateRideStatusMutation();
 
-  const rides = ridesResponse?.data || [];
-  const pagination = ridesResponse?.pagination;
+  // Driver service requests (new endpoint)
+  const { data: driverReqData, isLoading: driverReqLoading } = useGetDriverRideRequestsQuery({ showAll: true });
+
+  const loading = adminLoading || driverReqLoading;
+
+  // helper to map driver request shape to AdminRideOverview expected by UI
+  const mapDriverRequest = (req: any): AdminRideOverview => {
+    const rider = req.riderId ?? {};
+    const pickup = req.pickupLocation ?? {};
+    const dest = req.destination ?? {};
+    const coordsToAddr = (loc: any) => {
+      if (!loc) return '';
+      if (typeof loc === 'string') return loc;
+      if (loc.address) return loc.address;
+      if (loc.coordinates && Array.isArray(loc.coordinates.coordinates)) {
+        return `${loc.coordinates.coordinates[1]}, ${loc.coordinates.coordinates[0]}`;
+      }
+      return '';
+    };
+    return {
+      id: req._id,
+      rideId: req._id,
+      riderId: rider._id ?? rider.id ?? '',
+      riderName: `${(rider.firstName ?? '').trim()} ${(rider.lastName ?? '').trim()}`.trim() || (rider.email ?? 'Rider'),
+      driverId: req.driverId ?? null,
+      driverName: null,
+      pickupAddress: coordsToAddr(pickup),
+      destinationAddress: coordsToAddr(dest),
+      status: req.status ?? 'pending',
+      paymentMethod: req.paymentMethod ?? 'cash',
+      paymentStatus: req.paymentStatus ?? 'pending',
+      fare: typeof req.fare === 'object' ? (req.fare.estimated ?? 0) : (req.fare ?? 0),
+      distance: typeof req.distance === 'object' ? (req.distance.estimated ?? 0) : (req.distance ?? 0),
+      duration: typeof req.duration === 'object' ? (req.duration.estimated ?? 0) : (req.duration ?? 0),
+      createdAt: req.createdAt ?? req.timeline?.requested ?? '',
+      updatedAt: req.updatedAt ?? '',
+      issues: req.issues ?? [],
+      riderRating: req.rating?.riderRating ?? null,
+      driverRating: req.rating?.driverRating ?? null,
+    } as unknown as AdminRideOverview;
+  };
+
+  const apiRides = (ridesResponse?.data ?? []) as AdminRideOverview[];
+  const mappedDriverRequests = Array.isArray(driverReqData) ? driverReqData.map(mapDriverRequest) : [];
+
+  // prefer showing driver requests when available; otherwise show admin API rides
+  const rides = mappedDriverRequests.length > 0 ? mappedDriverRequests : apiRides;
+
+  // pagination: prefer admin pagination when using admin API; otherwise synthesize
+  const pagination = ridesResponse?.pagination ?? (mappedDriverRequests.length > 0 ? { total: mappedDriverRequests.length, page: 1, pages: 1 } : undefined);
 
   const handleSearch = (query: string) => {
     setSearchParams(prev => ({ ...prev, query, page: 1 }));
@@ -212,9 +188,17 @@ export function RideOversight({ className = '' }: RideOversightProps) {
   const handleRideAction = async (action: string) => {
     if (!actionRide) return;
 
+    // Ensure we have a defined rideId (some sources use id, others rideId)
+    const rideId = actionRide.ride.id ?? actionRide.ride.rideId;
+    if (!rideId) {
+      toast.error('Unable to perform action: missing ride ID');
+      setActionRide(null);
+      return;
+    }
+
     try {
       await updateRideStatus({
-        rideId: actionRide.ride.id,
+        rideId: rideId,
         action: action,
         reason: `Admin ${action} action`,
         refundAmount: action === 'refund' ? actionRide.ride.fare : undefined,
@@ -225,6 +209,56 @@ export function RideOversight({ className = '' }: RideOversightProps) {
     } catch {
       toast.error(`Failed to ${action} ride`);
     }
+  };
+
+  // Export visible rides as CSV and trigger download
+  const handleExport = () => {
+    const headers = [
+      'Ride ID',
+      'Created At',
+      'Rider Name',
+      'Rider ID',
+      'Driver Name',
+      'Driver ID',
+      'Pickup Address',
+      'Destination Address',
+      'Status',
+      'Payment Method',
+      'Payment Status',
+      'Fare',
+      'Distance',
+      'Duration'
+    ];
+
+    const rows = rides.map(r => ([
+      r.rideId ?? r.id ?? '',
+      r.createdAt ? new Date(r.createdAt).toLocaleString() : '',
+      r.riderName ?? '',
+      r.riderId ?? '',
+      r.driverName ?? '',
+      r.driverId ?? '',
+      r.pickupAddress ?? '',
+      r.destinationAddress ?? '',
+      r.status ?? '',
+      r.paymentMethod ?? '',
+      r.paymentStatus ?? '',
+      typeof r.fare === 'number' ? r.fare : Number(r.fare || 0),
+      typeof r.distance === 'number' ? r.distance : Number(r.distance || 0),
+      typeof r.duration === 'number' ? r.duration : String(r.duration || '')
+    ]));
+
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const now = new Date();
+    const fname = `rides-export-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.csv`;
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const getStatusBadge = (status: string) => {
@@ -255,7 +289,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className={`p-6 space-y-6 ${className}`}>
         <div className="space-y-4">
@@ -288,7 +322,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
         </div>
 
         <Button 
-          onClick={() => toast.success('Export started successfully')}
+          onClick={handleExport}
           className="btn-primary"
         >
           <Download className="h-4 w-4 mr-2" />
@@ -296,8 +330,8 @@ export function RideOversight({ className = '' }: RideOversightProps) {
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Stats Cards (issues card removed) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="glass">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Rides</CardTitle>
@@ -340,27 +374,12 @@ export function RideOversight({ className = '' }: RideOversightProps) {
             </p>
           </CardContent>
         </Card>
-
-        <Card className="glass">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Issues Reported</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {rides.filter(r => r.issues && r.issues.length > 0).length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Needs attention
-            </p>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Search and Filters */}
+      {/* Search and Filters (issues filter removed) */}
       <Card className="glass">
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             
             {/* Search Input */}
             <div className="relative">
@@ -408,20 +427,6 @@ export function RideOversight({ className = '' }: RideOversightProps) {
               </SelectContent>
             </Select>
 
-            {/* Issues Filter */}
-            <Select
-              value={searchParams.hasIssues ? 'true' : 'false'}
-              onValueChange={(value) => handleFilterChange('hasIssues', value === 'true')}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by issues" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="false">All Rides</SelectItem>
-                <SelectItem value="true">With Issues Only</SelectItem>
-              </SelectContent>
-            </Select>
-
             {/* Sort Options */}
             <Select
               value={`${searchParams.sortBy}-${searchParams.sortOrder}`}
@@ -446,11 +451,11 @@ export function RideOversight({ className = '' }: RideOversightProps) {
         </CardContent>
       </Card>
 
-      {/* Rides Table */}
+      {/* Rides Table (issues column removed) */}
       <Card className="glass">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Rides ({pagination?.total || 0})</span>
+            <span>Rides ({pagination?.total ?? rides.length})</span>
             <Badge variant="outline" className="text-xs">
               Page {pagination?.page || 1} of {pagination?.pages || 1}
             </Badge>
@@ -466,7 +471,6 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                 <TableHead>Route</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Payment</TableHead>
-                <TableHead>Issues</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -495,8 +499,8 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                           <DollarSign className="h-3 w-3 text-green-600" />
-                          <span className="font-medium">${ride.fare.toFixed(2)}</span>
-                          <span className="text-muted-foreground">• {ride.distance.toFixed(1)} km</span>
+                          <span className="font-medium">${Number(ride.fare || 0).toFixed(2)}</span>
+                          <span className="text-muted-foreground">• {Number(ride.distance || 0).toFixed(1)} km</span>
                         </div>
                       </div>
                     </TableCell>
@@ -507,7 +511,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                         <div className="flex items-center gap-2">
                           <Avatar className="h-6 w-6">
                             <AvatarFallback className="text-xs">
-                              {ride.riderName.split(' ').map(n => n[0]).join('')}
+                              {String(ride.riderName || '').split(' ').map((n: string) => n[0] || '').join('')}
                             </AvatarFallback>
                           </Avatar>
                           <div>
@@ -521,7 +525,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                           <div className="flex items-center gap-2">
                             <Avatar className="h-6 w-6">
                               <AvatarFallback className="text-xs">
-                                {ride.driverName.split(' ').map(n => n[0]).join('')}
+                                {String(ride.driverName).split(' ').map((n: string) => n[0] || '').join('')}
                               </AvatarFallback>
                             </Avatar>
                             <div>
@@ -564,7 +568,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                         variant="outline"
                         className={getStatusBadge(ride.status).className}
                       >
-                        {ride.status.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        {String(ride.status).replace('-', ' ').replace(/\b\w/g, l => String(l).toUpperCase())}
                       </Badge>
                     </TableCell>
 
@@ -574,21 +578,10 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                           variant="outline"
                           className={getPaymentStatusBadge(ride.paymentStatus).className}
                         >
-                          {ride.paymentStatus.charAt(0).toUpperCase() + ride.paymentStatus.slice(1)}
+                          {String(ride.paymentStatus || 'pending').charAt(0).toUpperCase() + String(ride.paymentStatus || 'pending').slice(1)}
                         </Badge>
                         <p className="text-xs text-muted-foreground">{ride.paymentMethod}</p>
                       </div>
-                    </TableCell>
-
-                    <TableCell>
-                      {ride.issues && ride.issues.length > 0 ? (
-                        <Badge variant="outline" className="bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
-                          <AlertTriangle className="h-3 w-3 mr-1" />
-                          {ride.issues.length} Issue{ride.issues.length > 1 ? 's' : ''}
-                        </Badge>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">None</span>
-                      )}
                     </TableCell>
 
                     <TableCell className="text-right">
@@ -633,16 +626,6 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                               Process Refund
                             </DropdownMenuItem>
                           )}
-
-                          {ride.issues && ride.issues.length > 0 && (
-                            <DropdownMenuItem
-                              onClick={() => setActionRide({ ride, action: 'resolve-issues' })}
-                              className="text-green-600"
-                            >
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Resolve Issues
-                            </DropdownMenuItem>
-                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -654,7 +637,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
         </CardContent>
       </Card>
 
-      {/* Ride Details Dialog */}
+      {/* Ride Details Dialog (issues details removed) */}
       <Dialog open={showRideDetails} onOpenChange={setShowRideDetails}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
@@ -674,7 +657,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                   <Badge 
                     className={getStatusBadge(selectedRide.status).className}
                   >
-                    {selectedRide.status.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    {String(selectedRide.status).replace('-', ' ').replace(/\b\w/g, l => String(l).toUpperCase())}
                   </Badge>
                 </div>
                 <div className="space-y-2">
@@ -682,7 +665,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                   <Badge 
                     className={getPaymentStatusBadge(selectedRide.paymentStatus).className}
                   >
-                    {selectedRide.paymentStatus.charAt(0).toUpperCase() + selectedRide.paymentStatus.slice(1)}
+                    {String(selectedRide.paymentStatus || 'pending').charAt(0).toUpperCase() + String(selectedRide.paymentStatus || 'pending').slice(1)}
                   </Badge>
                 </div>
               </div>
@@ -696,7 +679,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                   <div className="flex items-center gap-3">
                     <Avatar className="h-12 w-12">
                       <AvatarFallback>
-                        {selectedRide.riderName.split(' ').map(n => n[0]).join('')}
+                        {String(selectedRide.riderName || '').split(' ').map((n: string) => n[0] || '').join('')}
                       </AvatarFallback>
                     </Avatar>
                     <div>
@@ -715,7 +698,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                     <div className="flex items-center gap-3">
                       <Avatar className="h-12 w-12">
                         <AvatarFallback>
-                          {selectedRide.driverName.split(' ').map(n => n[0]).join('')}
+                          {String(selectedRide.driverName).split(' ').map((n: string) => n[0] || '').join('')}
                         </AvatarFallback>
                       </Avatar>
                       <div>
@@ -769,12 +752,12 @@ export function RideOversight({ className = '' }: RideOversightProps) {
               <div className="grid grid-cols-3 gap-6">
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <DollarSign className="h-6 w-6 mx-auto mb-2 text-green-600" />
-                  <p className="text-2xl font-bold">${selectedRide.fare.toFixed(2)}</p>
+                  <p className="text-2xl font-bold">${Number(selectedRide.fare || 0).toFixed(2)}</p>
                   <p className="text-sm text-muted-foreground">Total Fare</p>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <MapPin className="h-6 w-6 mx-auto mb-2 text-blue-600" />
-                  <p className="text-2xl font-bold">{selectedRide.distance.toFixed(1)} km</p>
+                  <p className="text-2xl font-bold">{Number(selectedRide.distance || 0).toFixed(1)} km</p>
                   <p className="text-sm text-muted-foreground">Distance</p>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
@@ -783,40 +766,6 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                   <p className="text-sm text-muted-foreground">Duration</p>
                 </div>
               </div>
-
-              {/* Issues Section */}
-              {selectedRide.issues && selectedRide.issues.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="space-y-3">
-                    <h4 className="font-medium text-red-600 flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4" />
-                      Reported Issues
-                    </h4>
-                    <div className="space-y-3">
-                      {selectedRide.issues.map((issue) => (
-                        <div key={issue.id} className="p-3 border border-red-200 rounded-lg bg-red-50 dark:bg-red-950/20 dark:border-red-800">
-                          <div className="flex items-center justify-between mb-2">
-                            <Badge 
-                              variant="outline" 
-                              className="bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300"
-                            >
-                              {issue.type.charAt(0).toUpperCase() + issue.type.slice(1)}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              Reported by {issue.reportedBy}
-                            </span>
-                          </div>
-                          <p className="text-sm">{issue.description}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {new Date(issue.createdAt).toLocaleString()}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
           )}
         </DialogContent>
@@ -830,13 +779,12 @@ export function RideOversight({ className = '' }: RideOversightProps) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Confirm {actionRide?.action.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              Confirm {actionRide?.action.replace('-', ' ').replace(/\b\w/g, l => String(l).toUpperCase())}
             </AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to {actionRide?.action.replace('-', ' ')} ride {actionRide?.ride.rideId}?
               {actionRide?.action === 'cancel' && ' This will cancel the ride and notify both parties.'}
               {actionRide?.action === 'refund' && ' This will process a full refund to the rider.'}
-              {actionRide?.action === 'resolve-issues' && ' This will mark all issues as resolved.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           
@@ -845,7 +793,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
             <AlertDialogAction
               onClick={() => handleRideAction(actionRide?.action || '')}
             >
-              Confirm {actionRide?.action.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              Confirm {actionRide?.action.replace('-', ' ').replace(/\b\w/g, l => String(l).toUpperCase())}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
