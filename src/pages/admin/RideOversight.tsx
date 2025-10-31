@@ -181,7 +181,9 @@ export function RideOversight({ className = '' }: RideOversightProps) {
     setSearchParams(prev => ({ ...prev, query, page: 1 }));
   };
 
-  const handleFilterChange = (key: keyof RideSearchParams, value: string | boolean) => {
+  type ExtendedSearchKeys = keyof (RideSearchParams & { query?: string; paymentStatus?: string; dateFrom?: string; dateTo?: string; hasIssues?: boolean; sortBy?: string; sortOrder?: 'asc' | 'desc' });
+
+  const handleFilterChange = (key: ExtendedSearchKeys, value: string | boolean) => {
     setSearchParams(prev => ({ ...prev, [key]: value, page: 1 }));
   };
 
@@ -202,7 +204,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
         action: action,
         reason: `Admin ${action} action`,
         refundAmount: action === 'refund' ? actionRide.ride.fare : undefined,
-      }).unwrap();
+      } as any).unwrap();
       
       toast.success(`Ride ${action}ed successfully`);
       setActionRide(null);
@@ -261,7 +263,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
     URL.revokeObjectURL(url);
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status?: string) => {
     const config = {
       pending: { className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' },
       accepted: { className: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' },
@@ -269,7 +271,8 @@ export function RideOversight({ className = '' }: RideOversightProps) {
       completed: { className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300' },
       cancelled: { className: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300' },
     };
-    return config[status as keyof typeof config] || config.pending;
+    const key = (status ?? 'pending') as keyof typeof config;
+    return config[key] || config.pending;
   };
 
   const getPaymentStatusBadge = (status: string) => {
@@ -457,7 +460,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
           <CardTitle className="flex items-center justify-between">
             <span>Rides ({pagination?.total ?? rides.length})</span>
             <Badge variant="outline" className="text-xs">
-              Page {pagination?.page || 1} of {pagination?.pages || 1}
+              Page {pagination?.page || 1} of {pagination?.page || 1}
             </Badge>
           </CardTitle>
         </CardHeader>
@@ -490,7 +493,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                         <p className="font-medium text-foreground">{ride.rideId}</p>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Calendar className="h-3 w-3" />
-                          {new Date(ride.createdAt).toLocaleDateString()}
+                          {ride.createdAt ? new Date(ride.createdAt).toLocaleDateString() : 'N/A'}
                           {ride.completedAt && (
                             <span className="text-xs">
                               • {formatDuration(ride.duration)}

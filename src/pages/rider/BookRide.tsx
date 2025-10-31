@@ -144,100 +144,7 @@ const BookRide: React.FC = () => {
     estimate();
   }, [pickupLocation, destinationLocation, getFareEstimation]);
 
-  // Submit Handler
-  // const onSubmit = async (data: BookRideFormData) => {
-  //   if (!data.pickupLocation || !data.destinationLocation) {
-  //     toast.error('Please select both pickup and destination');
-  //     return;
-  //   }
 
-  //   const toPoint = (loc: Location): [number, number] => [loc.longitude, loc.latitude];
-
-  //   const rideRequest = {
-  //     pickupLocation: {
-  //       address: data.pickupLocation.address,
-  //       latitude: data.pickupLocation.latitude,
-  //       longitude: data.pickupLocation.longitude,
-  //       coordinates: { type: 'Point' as const, coordinates: toPoint(data.pickupLocation) },
-  //     },
-  //     destinationLocation: {
-  //       address: data.destinationLocation.address,
-  //       latitude: data.destinationLocation.latitude,
-  //       longitude: data.destinationLocation.longitude,
-  //       coordinates: { type: 'Point' as const, coordinates: toPoint(data.destinationLocation) },
-  //     },
-  //     rideType: 'economy' as const,
-  //     paymentMethod: data.paymentMethod,
-  //     notes: '',
-  //   };
-
-  //   try {
-  //     setIsLoading(true);
-
-  //     // Build notes
-  //     const notes: string[] = [];
-  //     if (priorityRide) notes.push('Priority ride requested');
-  //     if (silentRide) notes.push('Silent ride requested');
-  //     rideRequest.notes = notes.length > 0 ? notes.join('; ') : 'Call when you arrive';
-
-  //     const res = await requestRide(rideRequest).unwrap();
-
-  //     // Extract ride ID
-  //     const rideId =
-  //       res?.data?.ride?.id ||
-  //       res?.data?.ride?._id ||
-  //       res?.data?._id ||
-  //       res?.id ||
-  //       res?._id ||
-  //       null;
-
-  //     // Detect "Already Requested"
-  //     const message = String(res?.message ?? '').toLowerCase();
-  //     const isAlreadyRequested =
-  //       res?.data?.alreadyBooked === true ||
-  //       res?.data?.already_booking === true ||
-  //       res?.data?.already_requested === true ||
-  //       res?.success === false ||
-  //       /already|exists|duplicate|booked|requested|pending/i.test(message);
-
-  //     if (isAlreadyRequested) {
-  //       toast.error('Already Requested');
-  //       navigate(rideId ? `/rider/rides/${rideId}` : '/rider/rides');
-  //       return;
-  //     }
-
-  //     // Success
-  //     toast.success('Ride Requested Successfully');
-  //     navigate(rideId ? `/rider/rides/${rideId}` : '/rider/rides');
-  //   } catch (error: any) {
-  //     console.error('Book ride error:', error);
-
-  //     const serverMessage = error?.data?.message || error?.message || '';
-  //     const status = error?.status;
-
-  //     // Handle 409 / duplicate
-  //     // if (status === 409 || /already|exists|duplicate/i.test(serverMessage)) {
-  //     //   toast.error('Already Requested');
-  //     //   navigate('/rider/rides');
-  //     //   return;
-  //     // }
-
-  //     if (status === 401) {
-  //       toast.error('Session expired. Please log in again.');
-  //       navigate('/login');
-  //       return;
-  //     }
-
-  //     toast.error(
-  //       serverMessage
-  //         ? `${serverMessage}${status ? ` (${status})` : ''}`
-  //         : 'Failed to book ride. Please try again.'
-  //     );
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
-  // ...existing code...
   // Submit Handler — always show success toast, do not display error toasts
   const onSubmit = async (data: BookRideFormData) => {
     if (!data.pickupLocation || !data.destinationLocation) {
@@ -296,7 +203,6 @@ const BookRide: React.FC = () => {
         setIsLoading(false);
       });
   };
-// ...existing code...
 
   const paymentOptions = [
     {

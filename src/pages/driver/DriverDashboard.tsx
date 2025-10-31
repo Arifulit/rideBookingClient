@@ -449,7 +449,7 @@ export default function DriverDashboard(): JSX.Element {
     }
   }, [profile]);
 
-// ...existing code...
+
   const handleToggleOnline = async () => {
     const newStatus = !isOnline;
     // optimistic UI update
@@ -482,7 +482,7 @@ export default function DriverDashboard(): JSX.Element {
     }
   };
 
-// ...existing code...
+
   const driverStats = useMemo(
     () => ({
       todayEarnings: earningsData?.summary?.earningsThisWeek ?? 0,

@@ -229,7 +229,6 @@ export const driverApi = baseApi.injectEndpoints({
       },
       invalidatesTags: ["DriverProfile"],
     }),
-// ...existing code...
 
     // Update driver availability status
     updateDriverAvailability: builder.mutation<

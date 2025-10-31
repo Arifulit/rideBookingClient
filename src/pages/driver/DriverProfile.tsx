@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// ...existing code...
 /* eslint-disable no-extra-boolean-cast */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -428,4 +427,3 @@ export default function DriverProfile(): JSX.Element {
     </div>
   );
 }
-// ...existing code...
