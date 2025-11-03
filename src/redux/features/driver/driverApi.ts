@@ -254,26 +254,27 @@ export const driverApi = baseApi.injectEndpoints({
       invalidatesTags: ["DriverProfile"],
     }),
 
-    // Update driver online status
-  
-// Update driver online status
+
 // Update driver online status
 updateDriverOnlineStatus: builder.mutation<
   {
-    data: any;
-    isOnline: boolean;
-    message: string;
-  },
-  boolean // ✅ Accepts boolean as argument
+    data: any; success: boolean; message?: string; data?: { isOnline?: boolean } 
+},
+  boolean | { isOnline?: boolean }
 >({
-  query: (isOnline) => ({
-    url: "/drivers/online-status",
-    method: "PATCH",
-    body: { isOnline: Boolean(isOnline) }, // ✅ Wraps boolean in object
-    headers: { "Content-Type": "application/json" },
-  }),
+  query: (payload) => {
+    const isOnline =
+      typeof payload === "boolean" ? payload : Boolean((payload as any).isOnline);
+    return {
+      url: "/drivers/online-status",
+      method: "PATCH",
+      data: { isOnline },
+      headers: { "Content-Type": "application/json" },
+    };
+  },
   invalidatesTags: ["DriverProfile"],
 }),
+// ...existing code...
 
     // Update driver location
     updateDriverLocation: builder.mutation<
@@ -594,7 +595,7 @@ updateDriverOnlineStatus: builder.mutation<
       }
     >({
       query: (params = {}) => ({
-        url: "/driver/rides/history",
+        url: "/rides/history",
         params,
       }),
       providesTags: ["RideHistory"],

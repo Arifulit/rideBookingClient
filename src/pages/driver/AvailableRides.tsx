@@ -10,7 +10,7 @@ export default function AvailableRides() {
   const { data: requests = [], isLoading, isFetching, isError, error } = useGetRideRequestsQuery({ showAll: true });
   const [acceptRideRequest, { isLoading: isAccepting }] = useAcceptRideRequestMutation();
 
-  // Debug logs
+
   console.debug('AvailableRides - getRideRequests result:', { requests, isLoading, isFetching, isError, error });
 
   const handleAcceptRide = async (rideId: string) => {

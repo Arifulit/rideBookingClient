@@ -6,7 +6,6 @@ import { RouterProvider } from "react-router";
 import { router } from "./routes/index.tsx";
 import { ThemeProvider } from "./providers/theme.provider.tsx";
 import { Toaster } from "./components/ui/sonner.tsx";
-
 // Redux + Persist
 import { Provider as ReduxProvider } from "react-redux";
 import store, { persistor } from "./redux/store.ts";

@@ -265,6 +265,7 @@ export default function RideDetails() {
   const durationValue = safeNumber(duration.actual ?? duration.estimated);
   const durationDisplay = durationValue !== null ? `${Math.round(durationValue)} min` : 'N/A';
 
+  
   // User info
   const riderName =
     safeString(riderInfo.fullName, '') ||

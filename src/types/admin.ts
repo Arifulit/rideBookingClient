@@ -15,7 +15,6 @@ export interface User {
   [x: string]: any;
   id: string;
   _id?: string;
-  // Backend এ firstName, lastName আলাদা field আছে
   firstName: string;
   lastName: string;
   name?: string; // Computed field for display
@@ -25,7 +24,6 @@ export interface User {
   phoneNumber?: string;
   contactNumber?: string;
   role: 'rider' | 'driver' | 'admin';
-  // Backend এ isActive field আছে
   isActive: 'active' | 'inactive' | 'suspended';
   status?: 'active' | 'blocked' | 'suspended' | 'pending'; // For compatibility
   isBlocked: boolean;
@@ -34,8 +32,8 @@ export interface User {
   profileImage?: string;
   avatar?: string;
   profilePicture?: string | null;
-  password?: string; // Backend এ আছে কিন্তু UI তে show করব না
-  auths?: any[]; // Backend এ আছে
+  password?: string; 
+  auths?: any[]; 
   createdAt: string;
   updatedAt: string;
   __v?: number; // MongoDB version field

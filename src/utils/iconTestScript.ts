@@ -1,9 +1,3 @@
-/**
- * Icon Solution Verification Script
- * 
- * This script verifies that our icon fallback solution is working correctly
- * and provides diagnostic information about the icon loading system.
- */
 
 // Test icon loading with fallbacks
 const testIconLoading = async () => {

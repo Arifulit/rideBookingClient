@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Car, Menu, X, User, LogOut, Settings } from 'lucide-react';
@@ -9,7 +10,7 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Mock user data - replace with your auth system
+  // Mock user data (replace with your authentication state)
   const isAuthenticated = false;
   const user = { name: 'John Doe', role: 'rider' };
 
@@ -38,14 +39,12 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3 group max-w-[220px]">
+          <Link to="/" className="flex items-center space-x-3 group">
             <div className="relative">
               <Car className="h-8 w-8 text-primary group-hover:text-primary/80 transition-colors" />
               <div className="absolute -inset-1 bg-primary/20 rounded-full opacity-0 group-hover:opacity-30 transition-opacity"></div>
             </div>
-            <span className="text-xl font-bold gradient-text truncate">
-              RideBook Pro
-            </span>
+            <span className="text-xl font-bold gradient-text">RideBook Pro</span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -57,8 +56,8 @@ const Navbar = () => {
                     key={item.name}
                     to={item.path}
                     className={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 hover:bg-accent ${
-                      isActive(item.path) 
-                        ? 'text-primary bg-accent' 
+                      isActive(item.path)
+                        ? 'text-primary bg-accent'
                         : 'text-foreground hover:text-foreground/80'
                     }`}
                   >
@@ -70,21 +69,22 @@ const Navbar = () => {
               <>
                 <Link
                   to={getDashboardPath()}
-                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 hover:bg-gray-100 ${
-                    location.pathname.includes('dashboard') 
-                      ? 'text-blue-600 bg-blue-50' 
-                      : 'text-gray-700 hover:text-gray-900'
+                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    location.pathname.includes('dashboard')
+                      ? 'text-primary bg-accent'
+                      : 'text-foreground hover:bg-accent'
                   }`}
                 >
                   Dashboard
                 </Link>
+
                 {user?.role === 'rider' && (
                   <Link
                     to="/rider/rides"
-                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 hover:bg-gray-100 ${
-                      location.pathname.includes('/rider/rides') 
-                        ? 'text-blue-600 bg-blue-50' 
-                        : 'text-gray-700 hover:text-gray-900'
+                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                      location.pathname.includes('/rider/rides')
+                        ? 'text-primary bg-accent'
+                        : 'text-foreground hover:bg-accent'
                     }`}
                   >
                     My Rides
@@ -94,20 +94,19 @@ const Navbar = () => {
             )}
           </div>
 
-          {/* Auth Buttons / User Menu */}
+          {/* Right Side (Auth Buttons / Dropdown) */}
           <div className="hidden md:flex items-center space-x-3">
-            {/* Theme Toggle Button */}
             <ModeToggle variant="ghost" size="sm" />
-            
+
             {!isAuthenticated ? (
               <>
-                <Link 
+                <Link
                   to="/login"
                   className="btn-secondary px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200"
                 >
                   Login
                 </Link>
-                <Link 
+                <Link
                   to="/register"
                   className="btn-primary px-4 py-2 text-sm font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105"
                 >
@@ -125,19 +124,19 @@ const Navbar = () => {
                   </div>
                   <span>{user?.name}</span>
                 </button>
-                
+
                 {dropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-popover border border-border rounded-xl shadow-lg py-1 z-50">
-                    <Link 
-                      to={`/${user?.role}/profile`} 
+                    <Link
+                      to={`/${user?.role}/profile`}
                       className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors"
                       onClick={() => setDropdownOpen(false)}
                     >
                       <User className="h-4 w-4 mr-2" />
                       Profile
                     </Link>
-                    <Link 
-                      to={`/${user?.role}/settings`} 
+                    <Link
+                      to={`/${user?.role}/settings`}
                       className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors"
                       onClick={() => setDropdownOpen(false)}
                     >
@@ -158,7 +157,7 @@ const Navbar = () => {
             )}
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile Menu Button */}
           <div className="md:hidden flex items-center space-x-2">
             <ModeToggle variant="ghost" size="sm" />
             <button
@@ -181,8 +180,8 @@ const Navbar = () => {
                       key={item.name}
                       to={item.path}
                       className={`block px-3 py-2 text-base font-medium rounded-lg transition-all duration-200 ${
-                        isActive(item.path) 
-                          ? 'text-primary bg-accent' 
+                        isActive(item.path)
+                          ? 'text-primary bg-accent'
                           : 'text-foreground hover:bg-accent'
                       }`}
                       onClick={() => setIsMobileMenuOpen(false)}
@@ -191,16 +190,16 @@ const Navbar = () => {
                     </Link>
                   ))}
                   <div className="pt-4 space-y-2">
-                    <Link 
+                    <Link
                       to="/login"
-                      className="btn-secondary block px-3 py-2 text-base font-medium rounded-lg transition-all duration-200 text-center"
+                      className="btn-secondary block px-3 py-2 text-base font-medium rounded-lg text-center"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       Login
                     </Link>
-                    <Link 
+                    <Link
                       to="/register"
-                      className="btn-primary block px-3 py-2 text-base font-medium rounded-lg transition-all duration-200 text-center"
+                      className="btn-primary block px-3 py-2 text-base font-medium rounded-lg text-center"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       Sign Up
@@ -211,14 +210,14 @@ const Navbar = () => {
                 <>
                   <Link
                     to={getDashboardPath()}
-                    className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:bg-accent rounded-lg transition-all duration-200"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     Dashboard
                   </Link>
                   <Link
                     to={`/${user?.role}/profile`}
-                    className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:bg-accent rounded-lg transition-all duration-200"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     Profile
@@ -228,7 +227,7 @@ const Navbar = () => {
                       handleLogout();
                       setIsMobileMenuOpen(false);
                     }}
-                    className="block w-full text-left px-3 py-2 text-base font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all duration-200"
+                    className="block w-full text-left px-3 py-2 text-base font-medium text-destructive hover:bg-destructive/10 rounded-lg transition-all duration-200"
                   >
                     Logout
                   </button>

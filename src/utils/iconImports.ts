@@ -1,16 +1,5 @@
-/**
- * Icon Import Helper - Use this to replace direct lucide-react imports
- * 
- * This helper provides safe alternatives to direct Lucide React imports
- * that might be blocked by ad blockers or privacy extensions.
- * 
- * Usage:
- * Instead of: import { Fingerprint, Shield, User } from 'lucide-react';
- * Use: import { Fingerprint, Shield, User } from './utils/iconImports';
- */
 
 import React from 'react';
-
 // Safe imports that use fallbacks for commonly blocked icons
 export { 
   SafeFingerprintIcon as Fingerprint,
