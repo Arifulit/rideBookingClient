@@ -6,7 +6,7 @@ export interface DriverProfile {
   lastName: string;
   email: string;
   phone: string;
-  // Optional password fields for update payloads (not returned by server)
+
   // Use only when sending update requests; these fields are optional so existing uses remain valid.
   currentPassword?: string;
   password?: string;

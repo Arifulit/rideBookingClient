@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
@@ -211,8 +210,7 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
     dispatch(setRideType(rideType));
   };
 
-  const formatLocationToGeo = (loc: { address: string; latitude?: number; longitude?: number } | undefined) => {
-    if (!loc) return null;
+  const formatLocationToGeo = (loc: { address: string; latitude?: number; longitude?: number }) => {
     return {
       address: loc.address || 'Unknown',
       coordinates: {
@@ -242,7 +240,7 @@ export function RideRequestForm({ onSuccess, className = '' }: RideRequestFormPr
     try {
       setIsSubmitting(true);
     // call RTK Query mutation (assumes server returns created ride object)
-      const result = await requestRide(payload).unwrap();
+      const result = await requestRide(payload as any).unwrap();
       toast.success('Ride requested successfully!');
       onSuccess?.(result.id || result._id || result.rideId || '');
       } catch (err: any) {

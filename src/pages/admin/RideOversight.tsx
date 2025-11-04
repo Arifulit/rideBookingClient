@@ -275,14 +275,15 @@ export function RideOversight({ className = '' }: RideOversightProps) {
     return config[key] || config.pending;
   };
 
-  const getPaymentStatusBadge = (status: string) => {
+  const getPaymentStatusBadge = (status?: string) => {
     const config = {
       pending: { className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300' },
       completed: { className: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' },
       failed: { className: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300' },
       refunded: { className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' },
     };
-    return config[status as keyof typeof config] || config.pending;
+    const key = (status ?? 'pending') as keyof typeof config;
+    return config[key] || config.pending;
   };
 
   const formatDuration = (minutes?: number) => {
@@ -355,7 +356,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {rides.filter(r => ['pending', 'accepted', 'in-progress'].includes(r.status)).length}
+              {rides.filter(r => ['pending', 'accepted', 'in-progress'].includes(r.status ?? '')).length}
             </div>
             <p className="text-xs text-muted-foreground">
               Currently active

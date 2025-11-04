@@ -188,7 +188,6 @@ export interface DriverRideHistory {
 
 // Minimal Rider shape returned by /drivers/riders
 export type Rider = {
-  vehicleModel: any;
   id: string;
   firstName?: string;
   lastName?: string;
@@ -196,6 +195,10 @@ export type Rider = {
   email?: string;
   rating?: number;
   profileImage?: string;
+  address?: string;
+  vehicleNumber?: string;
+  vehicleModel?: string;
+  completedRides?: number;
   createdAt?: string;
 };
 
@@ -258,8 +261,12 @@ export const driverApi = baseApi.injectEndpoints({
 // Update driver online status
 updateDriverOnlineStatus: builder.mutation<
   {
-    data: any; success: boolean; message?: string; data?: { isOnline?: boolean } 
-},
+    online?: any;
+    isOnline?: any;
+    success: boolean;
+    message?: string;
+    data?: { isOnline?: boolean };
+  },
   boolean | { isOnline?: boolean }
 >({
   query: (payload) => {
@@ -274,9 +281,9 @@ updateDriverOnlineStatus: builder.mutation<
   },
   invalidatesTags: ["DriverProfile"],
 }),
-// ...existing code...
 
-    // Update driver location
+
+  // Update driver location
     updateDriverLocation: builder.mutation<
       {
         location: { latitude: number; longitude: number; address: string };

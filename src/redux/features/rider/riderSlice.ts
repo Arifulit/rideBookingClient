@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import type { Ride, Location, RideFilter } from "@/types/rider";
 
 interface RiderState {
-  // Current ride state
   currentRide: Ride | null;
 
   // Ride request form state
@@ -147,9 +146,9 @@ const riderSlice = createSlice({
     setCurrentRide: (state, action: PayloadAction<Ride | null>) => {
       state.currentRide = action.payload;
       state.showLiveTracking =
-        action.payload?.status === "in_progress" ||
-        action.payload?.status === "driver_assigned" ||
-        action.payload?.status === "driver_arrived";
+        String(action.payload?.status) === "in_progress" ||
+        String(action.payload?.status) === "driver_assigned" ||
+        String(action.payload?.status) === "driver_arrived";
     },
 
     updateRideStatus: (
@@ -159,9 +158,9 @@ const riderSlice = createSlice({
       if (state.currentRide && state.currentRide.id === action.payload.rideId) {
         state.currentRide.status = action.payload.status;
         state.showLiveTracking =
-          action.payload.status === "in_progress" ||
-          action.payload.status === "driver_assigned" ||
-          action.payload.status === "driver_arrived";
+          String(action.payload.status) === "in_progress" ||
+          String(action.payload.status) === "driver_assigned" ||
+          String(action.payload.status) === "driver_arrived";
       }
     },
 
@@ -244,7 +243,7 @@ const riderSlice = createSlice({
     },
 
     // Reset entire state
-    resetRiderState: (state) => {
+    resetRiderState: () => {
       return initialState;
     },
   },

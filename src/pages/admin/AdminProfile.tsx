@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable no-empty-pattern */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
@@ -21,7 +21,6 @@ import {
   User,
   Mail,
   Phone,
-  MapPin,
   Calendar,
   Shield,
   Bell,
@@ -79,7 +78,7 @@ export default function AdminProfile() {
     system_updates: false,
   });
 
-  const [dashboard] = useState<DashboardPrefs>({
+  const [] = useState<DashboardPrefs>({
     default_view: 'analytics',
     auto_refresh: true,
     dark_mode: false,

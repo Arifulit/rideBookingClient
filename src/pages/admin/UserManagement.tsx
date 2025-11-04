@@ -1,7 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Users,
   Search,
@@ -14,17 +14,11 @@ import {
   RefreshCw,
   MoreHorizontal,
   Car,
-  Star,
-  DollarSign,
-  FileText,
   Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { useSelector } from 'react-redux';
-import { selectUser, selectIsAuthenticated } from '@/redux/store';
 import { unparse } from "papaparse";  // Correct // <-- CSV generator
-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -76,8 +70,6 @@ interface UserManagementProps {
 }
 
 export default function UserManagement({ className = '' }: UserManagementProps) {
-  const currentUser = useSelector(selectUser);
-  const isAuthenticated = useSelector(selectIsAuthenticated);
 
   const [searchRole, setSearchRole] = useState<'all' | 'drivers' | 'riders'>('all');
   const [query, setQuery] = useState('');

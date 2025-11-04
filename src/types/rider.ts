@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Rider specific types and interfaces
 
 // Base types and enums
@@ -63,17 +64,11 @@ export interface Driver {
 }
 
 export interface Ride {
-  data: any;
-  success: boolean;
-  message: string;
-  _id: any;
-  data: any;
-  [x: string]: any;
-  [x: string]: boolean;
   id: string;
+  _id?: any;
   riderId: string;
   driverId?: string;
-  driver: Driver;
+  driver?: Driver;
   pickupLocation: Location;
   destinationLocation: Location;
   rideType: RideType;
@@ -95,6 +90,10 @@ export interface Ride {
   ratingComment?: string;
   createdAt: string;
   updatedAt: string;
+  success?: boolean;
+  message?: string;
+  data?: any;
+  [key: string]: any;
 }
 
 export interface RideHistory {
@@ -253,14 +252,13 @@ export type LocationPoint = {
 
 export interface FareEstimation {
   total: number;
-  rideType: string;
-  duration: number; // minutes
-  distance: number; // meters or km depending on backend (use meters here)
-  baseFare: number;
-  distanceFare: number;
-  timeFare: number;
-  surgeFare: number;
-  surgeMultiplier: number;
-  taxes: number;
-  discount: number;
+  currency: string;
+  breakdown: {
+    baseFare: number;
+    distanceFare: number;
+    timeFare: number;
+    surgeFare: number;
+    taxes: number;
+    discount: number;
+  };
 }

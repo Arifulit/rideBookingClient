@@ -176,7 +176,6 @@ const driverSlice = createSlice({
       }
     },
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     updateEarnings: (state: { earnings: { today: any; week: any; month: any; }; }, action: PayloadAction<{ today?: number; week?: number; month?: number }>) => {
       if (action.payload.today !== undefined) state.earnings.today = action.payload.today;
       if (action.payload.week !== undefined) state.earnings.week = action.payload.week;

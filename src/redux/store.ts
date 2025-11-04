@@ -3,7 +3,6 @@ import { setupListeners } from "@reduxjs/toolkit/query";
 import { baseApi } from "./baseApi";
 import { adminApi } from "./features/admin/adminApi";
 import { riderApi } from "./features/rider/riderApi";
-// APIs are injected into baseApi, so no need to import them separately
 import authReducer from "./features/auth/authSlice";
 import riderReducer from "./features/rider/riderSlice";
 import driverReducer from "./features/driver/driverSlice";

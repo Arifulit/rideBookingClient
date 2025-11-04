@@ -38,7 +38,7 @@ const EnhancedDriverDashboard = () => {
   const dispatch = useDispatch();
   const { isOnline, currentLocation, notifications } = useSelector((state: RootState) => state.driver);
   
-  const { data: driverProfile } = useGetDriverProfileQuery();
+  const { data: driverProfile } = useGetDriverProfileQuery(undefined);
   const { data: analytics } = useGetDriverAnalyticsQuery({ period: 'week' });
   const { data: activeRide } = useGetActiveRideQuery();
   const { data: incomingRequests } = useGetIncomingRequestsQuery();

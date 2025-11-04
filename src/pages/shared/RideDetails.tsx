@@ -1,3 +1,4 @@
+/* eslint-disable no-empty */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
@@ -22,7 +23,6 @@ import {
   MessageSquare,
   Calendar,
   Loader2,
-  Hash,
 } from 'lucide-react';
 import { useGetRideDetailsQuery } from '@/redux/features/rider/riderApi';
 
@@ -142,7 +142,6 @@ export default function RideDetails() {
     return null;
   }, [apiResponse]);
 
-  // Debug logs
   React.useEffect(() => {
     try {
       console.groupCollapsed('RideDetails debug');

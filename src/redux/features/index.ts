@@ -1,2 +1,3 @@
 // Re-export auth API
-export * from './auth/auth.api';
+// './auth' module is not present; keep file as a module to avoid compile error
+export {};

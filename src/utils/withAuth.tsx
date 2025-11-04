@@ -19,11 +19,11 @@ export const withAuth = <P extends Record<string, any>>(
     const [authAttempts, setAuthAttempts] = React.useState(0);
 
     // Enhanced debugging with timestamp
-    console.log(`🔐 [${new Date().toLocaleTimeString()}] withAuth Debug:`, { 
-      isAuthenticated, 
-      hasUser: !!user, 
+    console.log(`🔐 [${new Date().toLocaleTimeString()}] withAuth Debug:`, {
+      isAuthenticated,
+      hasUser: !!user,
       hasToken: !!token,
-      hasTokens: !!tokens, 
+      hasTokens: !!tokens,
       isLoading: loading,
       userRole: (user as { role?: string } | null)?.role,
       requiredRole,
@@ -33,7 +33,7 @@ export const withAuth = <P extends Record<string, any>>(
 
     // Extended loading period for better auth stability
     const [isReady, setIsReady] = React.useState(false);
-    
+
     React.useEffect(() => {
       const timer = setTimeout(() => setIsReady(true), 300); // Give more time for auth to stabilize
       return () => clearTimeout(timer);
@@ -53,22 +53,22 @@ export const withAuth = <P extends Record<string, any>>(
     }
 
     // Multiple authentication validation layers
-    const hasValidToken = (tokens?.accessToken || token) && 
-                         typeof (tokens?.accessToken || token) === 'string' && 
-                         ((tokens?.accessToken || token) as string).length > 10;
+    const hasValidToken = (tokens?.accessToken || token) &&
+      typeof (tokens?.accessToken || token) === 'string' &&
+      ((tokens?.accessToken || token) as string).length > 10;
     const hasValidUser = user && typeof user === 'object' && (user.id || user.email);
     const authStateValid = isAuthenticated === true;
-    
+
     // Try localStorage recovery if auth state is incomplete
     if (!hasValidToken || !hasValidUser) {
       if (authAttempts < 3) { // Limit retry attempts
         const backupToken = localStorage.getItem('token') || sessionStorage.getItem('token');
         const backupUser = localStorage.getItem('user') || sessionStorage.getItem('user');
-        
+
         if (backupToken && backupUser && authAttempts < 2) {
           console.log("🔄 withAuth: Attempting auth recovery", { authAttempts });
           setAuthAttempts(prev => prev + 1);
-          
+
           // Give time for potential auth recovery
           return (
             <div className="min-h-screen flex items-center justify-center bg-background">
@@ -81,9 +81,9 @@ export const withAuth = <P extends Record<string, any>>(
         }
       }
     }
-    
+
     const isReallyAuthenticated = authStateValid && hasValidUser && hasValidToken;
-    
+
     // Final authentication check before redirect
     if (!isReallyAuthenticated && authAttempts >= 2) {
       console.log("❌ withAuth: Authentication failed after retries", {
@@ -99,15 +99,15 @@ export const withAuth = <P extends Record<string, any>>(
     if (requiredRole && isReallyAuthenticated) {
       const userRole = user?.role?.toLowerCase();
       const normalizedRequiredRole = requiredRole.toLowerCase();
-      
+
       // Allow both 'user' and 'rider' roles for rider routes
-      const roleMatches = userRole === normalizedRequiredRole || 
-                         (normalizedRequiredRole === 'rider' && userRole === 'user') ||
-                         (normalizedRequiredRole === 'user' && userRole === 'rider');
-      
+      const roleMatches = userRole === normalizedRequiredRole ||
+        (normalizedRequiredRole === 'rider' && userRole === 'user') ||
+        (normalizedRequiredRole === 'user' && userRole === 'rider');
+
       if (!roleMatches) {
-        console.log("🚫 withAuth: Role mismatch", { 
-          userRole: user?.role, 
+        console.log("🚫 withAuth: Role mismatch", {
+          userRole: user?.role,
           requiredRole,
           normalizedUserRole: userRole,
           normalizedRequiredRole

@@ -1,5 +1,5 @@
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   BarChart,
@@ -37,9 +37,11 @@ export default function DriverDashboard(): JSX.Element {
 
   // note: many API hooks return { data: {...} } — normalize here
   const { data: profileResp } = useGetDriverProfileQuery(undefined);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const profile = (profileResp && (profileResp as any).data) || profileResp || {};
 
   const { data: earningsResp } = useGetDriverEarningsQuery({ period: 'weekly' });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const earningsData = (earningsResp && (earningsResp as any).data) || earningsResp || {};
 
   const [updateOnlineStatus, { isLoading: isUpdatingOnline }] =
@@ -65,7 +67,7 @@ export default function DriverDashboard(): JSX.Element {
       const serverOnline = Boolean(
         res?.data?.isOnline ??
           res?.isOnline ??
-          res?.data?.online ??
+          res?.data?.isOnline ??
           res?.online ??
           newStatus
       );
@@ -356,7 +358,7 @@ export default function DriverDashboard(): JSX.Element {
                 {recentRides.length === 0 ? (
                   <div className="text-center text-gray-500 py-8">No recent rides</div>
                 ) : (
-                  recentRides.map((ride) => (
+                  recentRides.map((ride: { id: React.Key | null | undefined; passenger: string | number | boolean | React.ReactElement<any, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined; pickup: string | number | boolean | React.ReactElement<any, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | null | undefined; destination: string | number | boolean | React.ReactElement<any, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | null | undefined; earnings: string | number | boolean | React.ReactElement<any, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | null | undefined; duration: string | number | boolean | React.ReactElement<any, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | null | undefined; rating: number; }) => (
                     <div
                       key={ride.id}
                       className="group relative bg-gradient-to-r from-white to-gray-50 rounded-xl p-6 border border-gray-200 hover:border-purple-300 hover:shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
@@ -365,7 +367,11 @@ export default function DriverDashboard(): JSX.Element {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                            {ride.passenger.split(' ').map((n: string) => n[0]).join('')}
+                            {String(ride.passenger ?? '')
+                              .split(' ')
+                              .filter(Boolean)
+                              .map((n: string) => n[0] ?? '')
+                              .join('')}
                           </div>
                           <div>
                             <p className="font-bold text-gray-800 text-lg">{ride.passenger}</p>

@@ -5,8 +5,8 @@ import { useAppSelector } from '@/redux/hook';
 import { selectUser } from '@/redux/store';
 
 const AccountStatus = () => {
+  
   const user = useAppSelector(selectUser);
-
   const getStatusDetails = (status: string) => {
     switch (status) {
       case 'blocked':

@@ -1,13 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Mail, Phone, Calendar, MapPin, DollarSign, Clock, Edit2, Save, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useGetProfileQuery, useUpdateMyProfileMutation } from "@/redux/features/user/user.api";
 import { useNavigate } from 'react-router-dom';
 
 const RiderProfile = () => {
   const navigate = useNavigate();
-  const { data: apiResponse, isLoading, isError, error, refetch } = useGetProfileQuery({});
+  const { data: apiResponse, isLoading, isError, refetch } = useGetProfileQuery({});
   const [updateProfile, { isLoading: isUpdating }] = useUpdateMyProfileMutation();
 
   const [isEditing, setIsEditing] = useState(false);

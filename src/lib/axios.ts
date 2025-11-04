@@ -230,7 +230,7 @@ axiosInstance.interceptors.response.use(
     }
 
     if (status === 403) {
-      toast.error("You don't have permission to perform this action.");
+      // toast.error("You don't have permission to perform this action.");
     } else if (status === 404) {
       // Suppress user-facing toast for 404s; log instead for debugging
       console.warn('HTTP 404 Not Found:', error.config?.url, error.response?.data);

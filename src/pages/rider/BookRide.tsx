@@ -195,7 +195,6 @@ const BookRide: React.FC = () => {
       })
       .catch((err: any) => {
         // Silent failure: log for debugging but do not show any toast to the user
-        // eslint-disable-next-line no-console
         console.error('Background ride request failed:', err);
         navigate('/rider/rides/history'); // still navigate to rides history
       })
