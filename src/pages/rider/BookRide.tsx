@@ -145,7 +145,7 @@ const BookRide: React.FC = () => {
   }, [pickupLocation, destinationLocation, getFareEstimation]);
 
 
-  // Submit Handler — always show success toast, do not display error toasts
+// ...existing code...
   const onSubmit = async (data: BookRideFormData) => {
     if (!data.pickupLocation || !data.destinationLocation) {
       toast.error('Please select both pickup and destination');
@@ -154,54 +154,70 @@ const BookRide: React.FC = () => {
 
     const toPoint = (loc: Location): [number, number] => [loc.longitude, loc.latitude];
 
+    const pickup = {
+      address: data.pickupLocation.address,
+      latitude: Number(data.pickupLocation.latitude),
+      longitude: Number(data.pickupLocation.longitude),
+      coordinates: { type: 'Point' as const, coordinates: toPoint(data.pickupLocation) },
+    };
+
+    const destination = {
+      address: data.destinationLocation.address,
+      latitude: Number(data.destinationLocation.latitude),
+      longitude: Number(data.destinationLocation.longitude),
+      coordinates: { type: 'Point' as const, coordinates: toPoint(data.destinationLocation) },
+    };
+
+    // Send both shapes so backend that expects `destination` (or `pickup`) and
+    // other parts that expect `pickupLocation`/`destinationLocation` both work.
     const rideRequest = {
-      pickupLocation: {
-        address: data.pickupLocation.address,
-        latitude: data.pickupLocation.latitude,
-        longitude: data.pickupLocation.longitude,
-        coordinates: { type: 'Point' as const, coordinates: toPoint(data.pickupLocation) },
-      },
-      destinationLocation: {
-        address: data.destinationLocation.address,
-        latitude: data.destinationLocation.latitude,
-        longitude: data.destinationLocation.longitude,
-        coordinates: { type: 'Point' as const, coordinates: toPoint(data.destinationLocation) },
-      },
+      // canonical fields used elsewhere in frontend
+      pickupLocation: pickup,
+      destinationLocation: destination,
+
+      // aliases the backend may expect (makes endpoint tolerant)
+      pickup,
+      destination,
+
       rideType: 'economy' as const,
       paymentMethod: data.paymentMethod,
       notes: '',
     };
 
-    // Immediately show success message (user requested)
-    toast.success('Ride Requested Successfully');
+   
+    // eslint-disable-next-line no-console
+    console.debug('POST /rides/request payload:', rideRequest);
 
-    // Show loading state briefly
     setIsLoading(true);
 
-    // Fire-and-forget request: send to backend but don't show error toasts
-    requestRide(rideRequest)
-      .unwrap()
-      .then((res: any) => {
-        // Optional: if backend returns rideId, navigate to it; otherwise go to rides list
-        const rideId =
-          res?.data?.ride?.id ||
-          res?.data?.ride?._id ||
-          res?.data?._id ||
-          res?.id ||
-          res?._id ||
-          null;
+    try {
+      const res = await requestRide(rideRequest as any).unwrap();
 
-        navigate(rideId ? `/rider/rides/${rideId}` : '/rider/rides');
-      })
-      .catch((err: any) => {
-        // Silent failure: log for debugging but do not show any toast to the user
-        console.error('Background ride request failed:', err);
-        navigate('/rider/rides/history'); // still navigate to rides history
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      const rideId =
+        res?.data?.ride?.id ||
+        res?.data?.ride?._id ||
+        res?.data?._id ||
+        res?.ride?.id ||
+        res?.ride?._id ||
+        res?.id ||
+        res?._id ||
+        null;
+
+      toast.success('Ride Requested Successfully');
+
+      if (rideId) navigate(`/rider/rides/${rideId}`);
+      else navigate('/rider/rides/history');
+    } catch (err: any) {
+      // log full server payload for debugging
+      // eslint-disable-next-line no-console
+      console.error('Ride request failed:', err);
+      const msg = err?.data?.message || err?.message || 'Failed to request ride. Please try again.';
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
+// ...existing code...
 
   const paymentOptions = [
     {
@@ -475,3 +491,5 @@ const BookRide: React.FC = () => {
 };
 
 export default BookRide;
+
+

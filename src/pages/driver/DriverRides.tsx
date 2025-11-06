@@ -129,7 +129,7 @@ const DriverRides = (): JSX.Element => {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = String(token).replace(/^Bearer\s+/i, '');
         const base = (apiConfig?.baseURL ?? import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000/api/v1').replace(/\/$/, '');
-        const resp = await fetch(`${base}/driver/rides/requests?showAll=true`, {
+        const resp = await fetch(`${base}/drivers/rides/requests?showAll=true`, {
           method: 'GET',
           headers,
           credentials: 'include',

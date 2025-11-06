@@ -1,8 +1,9 @@
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from 'react';
-import { 
-  Route, 
-  Search, 
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Route,
+  Search,
   Download,
   MoreHorizontal,
   Eye,
@@ -13,7 +14,7 @@ import {
   DollarSign,
   Car,
   Calendar,
-  MapPin
+  MapPin,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -23,13 +24,13 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table';
 import {
   DropdownMenu,
@@ -46,12 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import {
   AlertDialog,
@@ -65,7 +61,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 // RTK Query hooks
-import { 
+import {
   useGetAdminRidesQuery,
   useUpdateRideStatusMutation,
   useGetDriverRideRequestsQuery,
@@ -101,7 +97,17 @@ interface RideOversightProps {
 }
 
 export function RideOversight({ className = '' }: RideOversightProps) {
-  const [searchParams, setSearchParams] = useState<RideSearchParams & { query?: string; paymentStatus?: string; dateFrom?: string; dateTo?: string; hasIssues?: boolean; sortBy?: string; sortOrder?: 'asc' | 'desc' }>({
+  const [searchParams, setSearchParams] = useState<
+    RideSearchParams & {
+      query?: string;
+      paymentStatus?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      hasIssues?: boolean;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+    }
+  >({
     query: '',
     status: 'all',
     paymentStatus: 'all',
@@ -114,83 +120,142 @@ export function RideOversight({ className = '' }: RideOversightProps) {
     limit: 10,
   });
 
+  // local debounced query state to avoid spamming API on each keystroke
+  const [localQuery, setLocalQuery] = useState(searchParams.query || '');
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearchParams(prev => ({ ...prev, query: localQuery, page: 1 }));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [localQuery]);
 
   const [selectedRide, setSelectedRide] = useState<AdminRideOverview | null>(null);
   const [showRideDetails, setShowRideDetails] = useState(false);
-  const [actionRide, setActionRide] = useState<{
-    ride: AdminRideOverview;
-    action: string;
-  } | null>(null);
+  const [actionRide, setActionRide] = useState<{ ride: AdminRideOverview; action: string } | null>(null);
 
-  // Admin rides (existing admin API)
+  // Admin rides (existing admin API) - uses full searchParams (debounced)
   const { data: ridesResponse, isLoading: adminLoading } = useGetAdminRidesQuery(searchParams);
   const [updateRideStatus] = useUpdateRideStatusMutation();
 
   // Driver service requests (new endpoint)
-  const { data: driverReqData, isLoading: driverReqLoading } = useGetDriverRideRequestsQuery({ showAll: true });
+  // decide whether to call driver endpoint with showAll or filtered flag:
+  const driverQueryParams = useMemo(() => {
+    const hasFilters =
+      Boolean(searchParams.query) ||
+      (searchParams.status && searchParams.status !== 'all') ||
+      (searchParams.paymentStatus && searchParams.paymentStatus !== 'all') ||
+      Boolean(searchParams.dateFrom) ||
+      Boolean(searchParams.dateTo);
+    return { showAll: !hasFilters, ...(hasFilters ? { query: searchParams.query, status: searchParams.status } : {}) };
+  }, [searchParams]);
+
+  const { data: driverReqData, isLoading: driverReqLoading } = useGetDriverRideRequestsQuery(driverQueryParams);
+
+  // eslint-disable-next-line no-console
+  console.debug('RideOversight - admin ridesResponse', ridesResponse);
+  // eslint-disable-next-line no-console
+  console.debug('RideOversight - driverReqData', driverReqData);
 
   const loading = adminLoading || driverReqLoading;
 
-  // helper to map driver request shape to AdminRideOverview expected by UI
+  // tolerant mapper for driver requests -> AdminRideOverview
   const mapDriverRequest = (req: any): AdminRideOverview => {
-    const rider = req.riderId ?? {};
-    const pickup = req.pickupLocation ?? {};
-    const dest = req.destination ?? {};
+    const rider = req.rider ?? req.riderId ?? {};
+    const driver = req.driver ?? req.driverInfo ?? {};
+    const pickup = req.pickupLocation ?? req.pickup ?? req.origin ?? {};
+    const dest = req.destinationLocation ?? req.destination ?? req.dropoff ?? {};
+
     const coordsToAddr = (loc: any) => {
       if (!loc) return '';
       if (typeof loc === 'string') return loc;
       if (loc.address) return loc.address;
-      if (loc.coordinates && Array.isArray(loc.coordinates.coordinates)) {
-        return `${loc.coordinates.coordinates[1]}, ${loc.coordinates.coordinates[0]}`;
+      if (typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+        return `${loc.latitude}, ${loc.longitude}`;
+      }
+      const maybeCoords =
+        Array.isArray(loc.coordinates) ? loc.coordinates : loc.coordinates?.coordinates ?? loc.coords ?? undefined;
+      if (Array.isArray(maybeCoords) && maybeCoords.length >= 2) {
+        return `${maybeCoords[1]}, ${maybeCoords[0]}`;
       }
       return '';
     };
+
+    const riderName =
+      ((rider.firstName ?? '').toString().trim() + ' ' + (rider.lastName ?? '').toString().trim()).trim() ||
+      rider.name ||
+      rider.email ||
+      'Rider';
+
+    const driverName =
+      ((driver.firstName ?? '').toString().trim() + ' ' + (driver.lastName ?? '').toString().trim()).trim() ||
+      driver.name ||
+      req.driverName ||
+      null;
+
     return {
-      id: req._id,
-      rideId: req._id,
-      riderId: rider._id ?? rider.id ?? '',
-      riderName: `${(rider.firstName ?? '').trim()} ${(rider.lastName ?? '').trim()}`.trim() || (rider.email ?? 'Rider'),
-      driverId: req.driverId ?? null,
-      driverName: null,
+      id: req._id ?? req.id ?? req.rideId,
+      rideId: req._id ?? req.id ?? req.rideId,
+      riderId: (rider._id ?? rider.id ?? req.riderId) as string,
+      riderName,
+      driverId: req.driverId ?? driver._id ?? driver.id ?? null,
+      driverName,
       pickupAddress: coordsToAddr(pickup),
       destinationAddress: coordsToAddr(dest),
       status: req.status ?? 'pending',
       paymentMethod: req.paymentMethod ?? 'cash',
       paymentStatus: req.paymentStatus ?? 'pending',
-      fare: typeof req.fare === 'object' ? (req.fare.estimated ?? 0) : (req.fare ?? 0),
-      distance: typeof req.distance === 'object' ? (req.distance.estimated ?? 0) : (req.distance ?? 0),
-      duration: typeof req.duration === 'object' ? (req.duration.estimated ?? 0) : (req.duration ?? 0),
-      createdAt: req.createdAt ?? req.timeline?.requested ?? '',
+      fare: typeof req.fare === 'object' ? req.fare.estimated ?? 0 : req.fare ?? 0,
+      distance: typeof req.distance === 'object' ? req.distance.estimated ?? 0 : req.distance ?? 0,
+      duration: typeof req.duration === 'object' ? req.duration.estimated ?? 0 : req.duration ?? 0,
+      createdAt: req.createdAt ?? req.timeline?.requested ?? req.requestedAt ?? '',
       updatedAt: req.updatedAt ?? '',
       issues: req.issues ?? [],
       riderRating: req.rating?.riderRating ?? null,
       driverRating: req.rating?.driverRating ?? null,
-    } as unknown as AdminRideOverview;
+    } as AdminRideOverview;
   };
 
   const apiRides = (ridesResponse?.data ?? []) as AdminRideOverview[];
   const mappedDriverRequests = Array.isArray(driverReqData) ? driverReqData.map(mapDriverRequest) : [];
 
-  // prefer showing driver requests when available; otherwise show admin API rides
-  const rides = mappedDriverRequests.length > 0 ? mappedDriverRequests : apiRides;
+  // eslint-disable-next-line no-console
+  console.debug('RideOversight - mappedDriverRequests', mappedDriverRequests);
+  // eslint-disable-next-line no-console
+  console.debug('RideOversight - apiRides', apiRides);
+
+  // selection rule:
+  // - if user applied filters or search (searchParams.query || status/payment filters), prefer admin API (server-side search)
+  // - otherwise show real-time driver requests if available
+  const hasActiveFilters =
+    Boolean(searchParams.query) ||
+    (searchParams.status && searchParams.status !== 'all') ||
+    (searchParams.paymentStatus && searchParams.paymentStatus !== 'all') ||
+    Boolean(searchParams.dateFrom) ||
+    Boolean(searchParams.dateTo);
+
+  const rides = hasActiveFilters ? apiRides : (mappedDriverRequests.length > 0 ? mappedDriverRequests : apiRides);
 
   // pagination: prefer admin pagination when using admin API; otherwise synthesize
-  const pagination = ridesResponse?.pagination ?? (mappedDriverRequests.length > 0 ? { total: mappedDriverRequests.length, page: 1, pages: 1 } : undefined);
+  const pagination =
+    ridesResponse?.pagination ?? (mappedDriverRequests.length > 0 ? { total: mappedDriverRequests.length, page: 1, pages: 1 } : undefined);
 
   const handleSearch = (query: string) => {
-    setSearchParams(prev => ({ ...prev, query, page: 1 }));
+    setLocalQuery(query);
   };
 
-  type ExtendedSearchKeys = keyof (RideSearchParams & { query?: string; paymentStatus?: string; dateFrom?: string; dateTo?: string; hasIssues?: boolean; sortBy?: string; sortOrder?: 'asc' | 'desc' });
+  type ExtendedSearchKeys = keyof (
+    RideSearchParams & { query?: string; paymentStatus?: string; dateFrom?: string; dateTo?: string; hasIssues?: boolean; sortBy?: string; sortOrder?: 'asc' | 'desc' }
+  );
 
   const handleFilterChange = (key: ExtendedSearchKeys, value: string | boolean) => {
+    // reset page whenever a filter changes
     setSearchParams(prev => ({ ...prev, [key]: value, page: 1 }));
   };
 
   const handleRideAction = async (action: string) => {
     if (!actionRide) return;
 
-    // Ensure we have a defined rideId (some sources use id, others rideId)
     const rideId = actionRide.ride.id ?? actionRide.ride.rideId;
     if (!rideId) {
       toast.error('Unable to perform action: missing ride ID');
@@ -200,12 +265,12 @@ export function RideOversight({ className = '' }: RideOversightProps) {
 
     try {
       await updateRideStatus({
-        rideId: rideId,
-        action: action,
+        rideId,
+        action,
         reason: `Admin ${action} action`,
         refundAmount: action === 'refund' ? actionRide.ride.fare : undefined,
       } as any).unwrap();
-      
+
       toast.success(`Ride ${action}ed successfully`);
       setActionRide(null);
     } catch {
@@ -213,7 +278,6 @@ export function RideOversight({ className = '' }: RideOversightProps) {
     }
   };
 
-  // Export visible rides as CSV and trigger download
   const handleExport = () => {
     const headers = [
       'Ride ID',
@@ -229,10 +293,10 @@ export function RideOversight({ className = '' }: RideOversightProps) {
       'Payment Status',
       'Fare',
       'Distance',
-      'Duration'
+      'Duration',
     ];
 
-    const rows = rides.map(r => ([
+    const rows = rides.map((r) => [
       r.rideId ?? r.id ?? '',
       r.createdAt ? new Date(r.createdAt).toLocaleString() : '',
       r.riderName ?? '',
@@ -246,15 +310,15 @@ export function RideOversight({ className = '' }: RideOversightProps) {
       r.paymentStatus ?? '',
       typeof r.fare === 'number' ? r.fare : Number(r.fare || 0),
       typeof r.distance === 'number' ? r.distance : Number(r.distance || 0),
-      typeof r.duration === 'number' ? r.duration : String(r.duration || '')
-    ]));
+      typeof r.duration === 'number' ? r.duration : String(r.duration || ''),
+    ]);
 
-    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const now = new Date();
-    const fname = `rides-export-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.csv`;
+    const fname = `rides-export-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}.csv`;
     a.href = url;
     a.download = fname;
     document.body.appendChild(a);
@@ -306,13 +370,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
   }
 
   return (
-    <motion.div 
-      className={`p-6 space-y-6 ${className}`}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-    >
-      
+    <motion.div className={`p-6 space-y-6 ${className}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
       {/* Header */}
       <div className="flex justify-between items-start">
         <div className="space-y-2">
@@ -320,21 +378,16 @@ export function RideOversight({ className = '' }: RideOversightProps) {
             <Route className="h-8 w-8" />
             Ride Oversight
           </h1>
-          <p className="text-muted-foreground">
-            Monitor and manage all rides with advanced filtering and actions
-          </p>
+          <p className="text-muted-foreground">Monitor and manage all rides with advanced filtering and actions</p>
         </div>
 
-        <Button 
-          onClick={handleExport}
-          className="btn-primary"
-        >
+        <Button onClick={handleExport} className="btn-primary">
           <Download className="h-4 w-4 mr-2" />
           Export Rides
         </Button>
       </div>
 
-      {/* Stats Cards (issues card removed) */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="glass">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -343,9 +396,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{rides.length}</div>
-            <p className="text-xs text-muted-foreground">
-              All time rides
-            </p>
+            <p className="text-xs text-muted-foreground">All time rides</p>
           </CardContent>
         </Card>
 
@@ -355,12 +406,8 @@ export function RideOversight({ className = '' }: RideOversightProps) {
             <Clock className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {rides.filter(r => ['pending', 'accepted', 'in-progress'].includes(r.status ?? '')).length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Currently active
-            </p>
+            <div className="text-2xl font-bold">{rides.filter((r) => ['pending', 'accepted', 'in-progress'].includes(r.status ?? '')).length}</div>
+            <p className="text-xs text-muted-foreground">Currently active</p>
           </CardContent>
         </Card>
 
@@ -370,37 +417,22 @@ export function RideOversight({ className = '' }: RideOversightProps) {
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {rides.filter(r => r.status === 'completed').length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Successful rides
-            </p>
+            <div className="text-2xl font-bold">{rides.filter((r) => r.status === 'completed').length}</div>
+            <p className="text-xs text-muted-foreground">Successful rides</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search and Filters (issues filter removed) */}
+      {/* Search and Filters */}
       <Card className="glass">
         <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            
-            {/* Search Input */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Search rides by ID, rider, or driver..."
-                value={searchParams.query || ''}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="pl-10"
-              />
+              <Input placeholder="Search rides by ID, rider, or driver..." value={localQuery} onChange={(e) => handleSearch(e.target.value)} className="pl-10" />
             </div>
 
-            {/* Status Filter */}
-            <Select
-              value={searchParams.status || 'all'}
-              onValueChange={(value) => handleFilterChange('status', value)}
-            >
+            <Select value={searchParams.status || 'all'} onValueChange={(value) => handleFilterChange('status', value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -414,11 +446,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
               </SelectContent>
             </Select>
 
-            {/* Payment Status Filter */}
-            <Select
-              value={searchParams.paymentStatus || 'all'}
-              onValueChange={(value) => handleFilterChange('paymentStatus', value)}
-            >
+            <Select value={searchParams.paymentStatus || 'all'} onValueChange={(value) => handleFilterChange('paymentStatus', value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Payment status" />
               </SelectTrigger>
@@ -431,7 +459,6 @@ export function RideOversight({ className = '' }: RideOversightProps) {
               </SelectContent>
             </Select>
 
-            {/* Sort Options */}
             <Select
               value={`${searchParams.sortBy}-${searchParams.sortOrder}`}
               onValueChange={(value) => {
@@ -455,7 +482,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
         </CardContent>
       </Card>
 
-      {/* Rides Table (issues column removed) */}
+      {/* Rides Table */}
       <Card className="glass">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -465,7 +492,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
             </Badge>
           </CardTitle>
         </CardHeader>
-        
+
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -478,28 +505,18 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
-            
+
             <TableBody>
               <AnimatePresence>
-                {rides.map((ride) => (
-                  <motion.tr
-                    key={ride.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="group hover:bg-muted/50"
-                  >
+                {rides.map((ride, idx) => (
+                  <motion.tr key={ride.rideId ?? ride.id ?? idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="group hover:bg-muted/50">
                     <TableCell>
                       <div className="space-y-1">
                         <p className="font-medium text-foreground">{ride.rideId}</p>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Calendar className="h-3 w-3" />
                           {ride.createdAt ? new Date(ride.createdAt).toLocaleDateString() : 'N/A'}
-                          {ride.completedAt && (
-                            <span className="text-xs">
-                              • {formatDuration(ride.duration)}
-                            </span>
-                          )}
+                          {ride.completedAt && <span className="text-xs">• {formatDuration(ride.duration)}</span>}
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                           <DollarSign className="h-3 w-3 text-green-600" />
@@ -511,26 +528,20 @@ export function RideOversight({ className = '' }: RideOversightProps) {
 
                     <TableCell>
                       <div className="space-y-2">
-                        {/* Rider */}
                         <div className="flex items-center gap-2">
                           <Avatar className="h-6 w-6">
-                            <AvatarFallback className="text-xs">
-                              {String(ride.riderName || '').split(' ').map((n: string) => n[0] || '').join('')}
-                            </AvatarFallback>
+                            <AvatarFallback className="text-xs">{String(ride.riderName || '').split(' ').map((n: string) => n[0] || '').join('')}</AvatarFallback>
                           </Avatar>
                           <div>
                             <p className="text-sm font-medium">{ride.riderName}</p>
                             <p className="text-xs text-muted-foreground">Rider</p>
                           </div>
                         </div>
-                        
-                        {/* Driver */}
+
                         {ride.driverName ? (
                           <div className="flex items-center gap-2">
                             <Avatar className="h-6 w-6">
-                              <AvatarFallback className="text-xs">
-                                {String(ride.driverName).split(' ').map((n: string) => n[0] || '').join('')}
-                              </AvatarFallback>
+                              <AvatarFallback className="text-xs">{String(ride.driverName).split(' ').map((n: string) => n[0] || '').join('')}</AvatarFallback>
                             </Avatar>
                             <div>
                               <p className="text-sm font-medium">{ride.driverName}</p>
@@ -554,35 +565,26 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                       <div className="space-y-1 max-w-xs">
                         <div className="flex items-start gap-1">
                           <div className="w-2 h-2 bg-green-500 rounded-full mt-1.5 flex-shrink-0" />
-                          <p className="text-xs text-muted-foreground truncate">
-                            {ride.pickupAddress}
-                          </p>
+                          <p className="text-xs text-muted-foreground truncate">{ride.pickupAddress}</p>
                         </div>
                         <div className="flex items-start gap-1">
                           <div className="w-2 h-2 bg-red-500 rounded-full mt-1.5 flex-shrink-0" />
-                          <p className="text-xs text-muted-foreground truncate">
-                            {ride.destinationAddress}
-                          </p>
+                          <p className="text-xs text-muted-foreground truncate">{ride.destinationAddress}</p>
                         </div>
                       </div>
                     </TableCell>
 
                     <TableCell>
-                      <Badge 
-                        variant="outline"
-                        className={getStatusBadge(ride.status).className}
-                      >
-                        {String(ride.status).replace('-', ' ').replace(/\b\w/g, l => String(l).toUpperCase())}
+                      <Badge variant="outline" className={getStatusBadge(ride.status).className}>
+                        {String(ride.status).replace('-', ' ').replace(/\b\w/g, (l) => String(l).toUpperCase())}
                       </Badge>
                     </TableCell>
 
                     <TableCell>
                       <div className="space-y-1">
-                        <Badge 
-                          variant="outline"
-                          className={getPaymentStatusBadge(ride.paymentStatus).className}
-                        >
-                          {String(ride.paymentStatus || 'pending').charAt(0).toUpperCase() + String(ride.paymentStatus || 'pending').slice(1)}
+                        <Badge variant="outline" className={getPaymentStatusBadge(ride.paymentStatus).className}>
+                          {String(ride.paymentStatus || 'pending').charAt(0).toUpperCase() +
+                            String(ride.paymentStatus || 'pending').slice(1)}
                         </Badge>
                         <p className="text-xs text-muted-foreground">{ride.paymentMethod}</p>
                       </div>
@@ -595,10 +597,10 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        
+
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          
+
                           <DropdownMenuItem
                             onClick={() => {
                               setSelectedRide(ride);
@@ -612,20 +614,14 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                           <DropdownMenuSeparator />
 
                           {ride.status === 'pending' && (
-                            <DropdownMenuItem
-                              onClick={() => setActionRide({ ride, action: 'cancel' })}
-                              className="text-red-600"
-                            >
+                            <DropdownMenuItem onClick={() => setActionRide({ ride, action: 'cancel' })} className="text-red-600">
                               <Ban className="h-4 w-4 mr-2" />
                               Cancel Ride
                             </DropdownMenuItem>
                           )}
 
                           {ride.paymentStatus === 'completed' && (
-                            <DropdownMenuItem
-                              onClick={() => setActionRide({ ride, action: 'refund' })}
-                              className="text-blue-600"
-                            >
+                            <DropdownMenuItem onClick={() => setActionRide({ ride, action: 'refund' })} className="text-blue-600">
                               <RefreshCw className="h-4 w-4 mr-2" />
                               Process Refund
                             </DropdownMenuItem>
@@ -641,7 +637,7 @@ export function RideOversight({ className = '' }: RideOversightProps) {
         </CardContent>
       </Card>
 
-      {/* Ride Details Dialog (issues details removed) */}
+      {/* Ride Details Dialog */}
       <Dialog open={showRideDetails} onOpenChange={setShowRideDetails}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
@@ -653,45 +649,34 @@ export function RideOversight({ className = '' }: RideOversightProps) {
 
           {selectedRide && (
             <div className="space-y-6 max-h-[70vh] overflow-y-auto">
-              
-              {/* Status and Payment */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <h4 className="font-medium">Ride Status</h4>
-                  <Badge 
-                    className={getStatusBadge(selectedRide.status).className}
-                  >
-                    {String(selectedRide.status).replace('-', ' ').replace(/\b\w/g, l => String(l).toUpperCase())}
+                  <Badge className={getStatusBadge(selectedRide.status).className}>
+                    {String(selectedRide.status).replace('-', ' ').replace(/\b\w/g, (l) => String(l).toUpperCase())}
                   </Badge>
                 </div>
                 <div className="space-y-2">
                   <h4 className="font-medium">Payment Status</h4>
-                  <Badge 
-                    className={getPaymentStatusBadge(selectedRide.paymentStatus).className}
-                  >
-                    {String(selectedRide.paymentStatus || 'pending').charAt(0).toUpperCase() + String(selectedRide.paymentStatus || 'pending').slice(1)}
+                  <Badge className={getPaymentStatusBadge(selectedRide.paymentStatus).className}>
+                    {String(selectedRide.paymentStatus || 'pending').charAt(0).toUpperCase() +
+                      String(selectedRide.paymentStatus || 'pending').slice(1)}
                   </Badge>
                 </div>
               </div>
-
               <Separator />
 
-              {/* Participants */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-3">
                   <h4 className="font-medium">Rider Information</h4>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-12 w-12">
-                      <AvatarFallback>
-                        {String(selectedRide.riderName || '').split(' ').map((n: string) => n[0] || '').join('')}
-                      </AvatarFallback>
+                      <AvatarFallback>{String(selectedRide.riderName || '').split(' ').map((n: string) => n[0] || '').join('')}</AvatarFallback>
                     </Avatar>
                     <div>
                       <p className="font-medium">{selectedRide.riderName}</p>
                       <p className="text-sm text-muted-foreground">ID: {selectedRide.riderId}</p>
-                      {selectedRide.riderRating && (
-                        <p className="text-sm">Rating: {selectedRide.riderRating}/5 ⭐</p>
-                      )}
+                      {selectedRide.riderRating && <p className="text-sm">Rating: {selectedRide.riderRating}/5 ⭐</p>}
                     </div>
                   </div>
                 </div>
@@ -701,16 +686,12 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                   {selectedRide.driverName ? (
                     <div className="flex items-center gap-3">
                       <Avatar className="h-12 w-12">
-                        <AvatarFallback>
-                          {String(selectedRide.driverName).split(' ').map((n: string) => n[0] || '').join('')}
-                        </AvatarFallback>
+                        <AvatarFallback>{String(selectedRide.driverName).split(' ').map((n: string) => n[0] || '').join('')}</AvatarFallback>
                       </Avatar>
                       <div>
                         <p className="font-medium">{selectedRide.driverName}</p>
                         <p className="text-sm text-muted-foreground">ID: {selectedRide.driverId}</p>
-                        {selectedRide.driverRating && (
-                          <p className="text-sm">Rating: {selectedRide.driverRating}/5 ⭐</p>
-                        )}
+                        {selectedRide.driverRating && <p className="text-sm">Rating: {selectedRide.driverRating}/5 ⭐</p>}
                       </div>
                     </div>
                   ) : (
@@ -720,7 +701,6 @@ export function RideOversight({ className = '' }: RideOversightProps) {
                       </div>
                       <div>
                         <p className="font-medium text-muted-foreground">No driver assigned</p>
-                        <p className="text-sm text-muted-foreground">Ride was cancelled</p>
                       </div>
                     </div>
                   )}
@@ -729,7 +709,6 @@ export function RideOversight({ className = '' }: RideOversightProps) {
 
               <Separator />
 
-              {/* Route Information */}
               <div className="space-y-3">
                 <h4 className="font-medium">Route Information</h4>
                 <div className="space-y-3">
@@ -752,7 +731,6 @@ export function RideOversight({ className = '' }: RideOversightProps) {
 
               <Separator />
 
-              {/* Trip Details */}
               <div className="grid grid-cols-3 gap-6">
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <DollarSign className="h-6 w-6 mx-auto mb-2 text-green-600" />
@@ -776,14 +754,11 @@ export function RideOversight({ className = '' }: RideOversightProps) {
       </Dialog>
 
       {/* Action Confirmation Dialog */}
-      <AlertDialog 
-        open={!!actionRide} 
-        onOpenChange={() => setActionRide(null)}
-      >
+      <AlertDialog open={!!actionRide} onOpenChange={() => setActionRide(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Confirm {actionRide?.action.replace('-', ' ').replace(/\b\w/g, l => String(l).toUpperCase())}
+              Confirm {actionRide?.action.replace('-', ' ').replace(/\b\w/g, (l) => String(l).toUpperCase())}
             </AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to {actionRide?.action.replace('-', ' ')} ride {actionRide?.ride.rideId}?
@@ -791,13 +766,11 @@ export function RideOversight({ className = '' }: RideOversightProps) {
               {actionRide?.action === 'refund' && ' This will process a full refund to the rider.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => handleRideAction(actionRide?.action || '')}
-            >
-              Confirm {actionRide?.action.replace('-', ' ').replace(/\b\w/g, l => String(l).toUpperCase())}
+            <AlertDialogAction onClick={() => handleRideAction(actionRide?.action || '')}>
+              Confirm {actionRide?.action.replace('-', ' ').replace(/\b\w/g, (l) => String(l).toUpperCase())}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

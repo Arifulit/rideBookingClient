@@ -1,7 +1,7 @@
 
-// import Bookings from "@/pages/User/Bookings";
-// import RideDetails from "@/pages/shared/RideDetails";
-import { User, Car } from "lucide-react";
+
+import RideHistory from "@/pages/rider/RideHistory";
+import { User, Car, Info } from "lucide-react";
 import { lazy } from "react";
 
 const RiderDashboard = lazy(() => import("@/pages/rider/RiderDashboard"));
@@ -25,25 +25,19 @@ export const userSidebarItems = [
         component: BookRide,
       },
     
-      // {
-      //   title: "Ride History",
-      //   url: "/rider/rides/history",
-      //   icon: Info,
-      //   component: RideHistory,
-      // },
+      {
+        title: "Ride History",
+        url: "/rider/rides/history",
+        icon: Info,
+        component: RideHistory,
+      },
       {
         title: "Profile",
         url: "/rider/profile",
         icon: User,
         component: RiderProfile,
       },
-    
-      // {
-      //   title: "Ride Details",
-      //   url: "/rider/rides/details",
-      //   icon: Info,
-      //   component: RideDetails,
-      // },
+  
     ],
   },
 ];

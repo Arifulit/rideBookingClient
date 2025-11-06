@@ -413,7 +413,7 @@ export const adminApi = createApi({
         if (params?.status) p.append('status', String(params.status));
         // backend path as provided
         const qs = p.toString();
-        return `/driver/rides/requests${qs ? `?${qs}` : ''}`;
+        return `/drivers/rides/requests${qs ? `?${qs}` : ''}`;
       },
       transformResponse: (res: any) => {
         // normalize to array (res.data expected)

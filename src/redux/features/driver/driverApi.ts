@@ -312,7 +312,7 @@ updateDriverOnlineStatus: builder.mutation<
     }),
 
     // Get all ride requests / showAll (backend endpoint given by user)
-    // Example backend: /api/v1/driver/rides/requests?showAll=true
+    // Example backend: /api/v1/drivers/rides/requests?showAll=true
     getRideRequests: builder.query<RideRequest[], { showAll?: boolean } | void>(
       {
         query: (params = { showAll: true }) => ({
@@ -783,3 +783,4 @@ export const {
 // Export aliases for backward compatibility
 export const useRespondToRequestMutation = useAcceptRideRequestMutation;
 export const useCancelRideMutation = useUpdateRideStatusMutation;
+
