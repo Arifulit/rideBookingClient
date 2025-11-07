@@ -5,7 +5,7 @@ This project replicates modern ride-hailing systems like **Uber** or **Pathao**,
 
 > 🌐 **Live Demo:** [https://ride-booking-client-one.vercel.app/](https://ride-booking-client-one.vercel.app/)  
 > 🎥 **Demo Video:** [🔗 Watch the demo video](https://drive.google.com/file/d/1qSwijwX5yz1nfHPxkroICcIdCfj9Gmt8/view?usp=sharing)  
-> 🗂️ **Backend Repository:** [Ride Booking Backend](https://github.com/Arifulit/rideBookingServer)
+> 🗂️ **Backend Repository:** [Ride Booking Backend](https://github.com/Arifulit/Ride-booking-server)
 
 ---
 
